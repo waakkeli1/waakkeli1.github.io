@@ -58,14 +58,14 @@
 
 <div id="start" class="overlay">
   <div class="inner">
-    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.2.0-swing-physics-rooftops</div>
+    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.3.0-fall-web-hands-climb</div>
     <h1>WEB <em>SWINGER</em> VR</h1>
-    <p class="sub">First person -kaupunkikeinunta passiivisille VR-laseille. Vasen ja oikea triggeri ampuvat valkoiset seitit rakennuksiin. Laskeudu katoille, juokse tateilla, hyppää alas ja rakenna korkea, luonnollinen swing-kaari.</p>
+    <p class="sub">First person -kaupunkikeinunta passiivisille VR-laseille. Vasen ja oikea triggeri ampuvat valkoiset seitit rakennuksiin. Laskeudu katoille, juokse tateilla, hyppää alas ja tartu seiniin L1/R1:llä kiipeilyä varten.</p>
     <div id="padStatus" class="pad-status">Ohjain: paina mitä tahansa nappia herättääksesi…</div>
     <div class="cardrow">
       <div class="card"><b>Vasen/oikea seitti</b><span>L2 ja R2 tarttuvat korkeisiin rakennuksiin. X/A pumppaa vauhtia tai hyppää katolta.</span></div>
       <div class="card"><b>VR-kalibrointi</b><span>D-pad vasen/oikea säätää IPD:tä, ylös/alas FOVia.</span></div>
-      <div class="card"><b>Katot & kävely</b><span>Rakennusten katoille voi laskeutua, kävellä ja hypätä takaisin ilmaan.</span></div>
+      <div class="card"><b>Katot, kävely & kiipeily</b><span>Katoille voi laskeutua. L1/R1 tarttuu seinään, tatti kiipeää, X/A hyppää irti.</span></div>
     </div>
     <div class="btns">
       <button id="btnVR">Pelaa VR:ssä</button>
@@ -74,7 +74,7 @@
     </div>
     <p class="hint">
       <b>R2</b> oikea seitti · <b>L2</b> vasen seitti · <b>X/A</b> hyppy / swing-boost · <b>vasen tatti</b> kävely ja ilmakorjaus<br>
-      <b>△/Y</b> keskitä näkymä · <b>○/B</b> resetoi kadulle · <b>Options</b> pause · <b>D-pad</b> IPD/FOV<br>
+      <b>L1/R1</b> tartu seinään / kiipeily · <b>△/Y</b> keskitä · <b>○/B</b> resetoi · <b>Options</b> pause · <b>D-pad</b> IPD/FOV<br>
       2D-testissä voit katsoa ympärille vetämällä ruutua. Touch-painikkeet näkyvät vain ilman ohjainta.
     </p>
   </div>
@@ -85,7 +85,7 @@
 'use strict';
 
 /* näkyvä virheruutu */
-const VERSION = '0.2.0-swing-physics-rooftops';
+const VERSION = '0.3.0-fall-web-hands-climb';
 const errorBox = document.getElementById('errorBox');
 window.addEventListener('error', function(e){
   const msg = 'Web Swinger VR kaatui:\n\n' + (e.message || 'tuntematon virhe') + '\n\nVersion: ' + VERSION;
@@ -150,11 +150,11 @@ const roadMat = new THREE.MeshLambertMaterial({color:0x161c2a});
 const sidewalkMat = new THREE.MeshLambertMaterial({color:0x1e2538});
 const laneMat = new THREE.MeshBasicMaterial({color:0xbcd7ff});
 const webMats = [
-  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.92, depthWrite:false}),
-  new THREE.LineBasicMaterial({color:0xeaf7ff, transparent:true, opacity:0.62, depthWrite:false}),
-  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.48, depthWrite:false}),
-  new THREE.LineBasicMaterial({color:0xdbefff, transparent:true, opacity:0.38, depthWrite:false}),
-  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.30, depthWrite:false})
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.95, depthWrite:false, depthTest:false}),
+  new THREE.LineBasicMaterial({color:0xeaf7ff, transparent:true, opacity:0.70, depthWrite:false, depthTest:false}),
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.55, depthWrite:false, depthTest:false}),
+  new THREE.LineBasicMaterial({color:0xdbefff, transparent:true, opacity:0.46, depthWrite:false, depthTest:false}),
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.38, depthWrite:false, depthTest:false})
 ];
 const anchorMat = new THREE.MeshBasicMaterial({color:0xffd271, transparent:true, opacity:.75, depthWrite:false});
 
@@ -167,18 +167,63 @@ const camM = new THREE.PerspectiveCamera(76, 1, 0.04, 1800);
 camL.position.x = -0.032; camR.position.x = 0.032;
 head.add(camL); head.add(camR); head.add(camM);
 
-/* pieni first-person torso/kädet */
+/* pieni first-person torso/kädet — ei tattipalikoita vaan yksinkertaiset hanskat + ranneampujat */
 const bodyGroup = new THREE.Group(); head.add(bodyGroup); bodyGroup.position.set(0,-0.55,-0.9);
-const handMatL = new THREE.MeshLambertMaterial({color:0x4edfff});
-const handMatR = new THREE.MeshLambertMaterial({color:0xff4d70});
-function makeHand(side, mat){
+const gloveMat = new THREE.MeshLambertMaterial({color:0x161a22, flatShading:true});
+const palmMat = new THREE.MeshLambertMaterial({color:0xd8d1c5, flatShading:true});
+const cuffMat = new THREE.MeshLambertMaterial({color:0x2c3444, flatShading:true});
+const shooterMat = new THREE.MeshBasicMaterial({color:0xf4f8ff});
+function makeFinger(x,y,z,len){
+  const fg = new THREE.Group();
+  const a = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.017,len,8), gloveMat);
+  a.rotation.x = Math.PI/2; a.position.set(x,y,z); fg.add(a);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.019,8,6), gloveMat);
+  tip.position.set(x,y,z-len*.52); fg.add(tip);
+  return fg;
+}
+function makeHand(side){
   const g = new THREE.Group();
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.045,0.42,10), mat);
-  arm.rotation.z = side*0.45; arm.rotation.x = Math.PI/2.6; arm.position.set(side*.38,-.05,-.18); g.add(arm);
-  const fist = new THREE.Mesh(new THREE.SphereGeometry(0.07,12,8), mat); fist.position.set(side*.48,-.12,-.38); g.add(fist);
+  const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.043,0.055,0.42,10), gloveMat);
+  forearm.rotation.x = Math.PI/2.45; forearm.rotation.z = side*.23; forearm.position.set(side*.03,.05,.18); g.add(forearm);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.057,.075,10), cuffMat);
+  cuff.rotation.x = Math.PI/2.45; cuff.position.set(side*.02,.015,.02); g.add(cuff);
+  const palm = new THREE.Mesh(new THREE.BoxGeometry(.16,.085,.12), palmMat);
+  palm.position.set(side*.015,-.02,-.13); palm.rotation.y = side*.08; g.add(palm);
+  const knuckle = new THREE.Mesh(new THREE.BoxGeometry(.15,.035,.035), gloveMat);
+  knuckle.position.set(side*.015,.025,-.205); g.add(knuckle);
+  for(let i=0;i<4;i++){
+    const fx = side*((i-1.5)*.032);
+    const f = makeFinger(fx,.01,-.25,.11 - Math.abs(i-1.5)*.008);
+    g.add(f);
+  }
+  const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.017,0.019,.105,8), gloveMat);
+  thumb.rotation.x = Math.PI/2.2; thumb.rotation.z = -side*.8; thumb.position.set(side*.105,-.035,-.16); g.add(thumb);
+  const shooter = new THREE.Mesh(new THREE.BoxGeometry(.13,.025,.055), shooterMat);
+  shooter.position.set(0,-.07,-.03); g.add(shooter);
+  g.position.set(side*.42,-.11,-.38);
+  g.rotation.set(-.15, side*.22, side*.07);
+  g.userData.side = side;
   return g;
 }
-bodyGroup.add(makeHand(-1, handMatL)); bodyGroup.add(makeHand(1, handMatR));
+const handL = makeHand(-1), handR = makeHand(1);
+bodyGroup.add(handL); bodyGroup.add(handR);
+function updateHands(controls){
+  const t = performance.now()*0.006;
+  const climbMove = controls ? Math.abs(controls.steer||0) + Math.abs(controls.pitch||0) : 0;
+  const set = (h, side, x, y, z, rx, ry, rz)=>{ h.position.set(x,y,z); h.rotation.set(rx,ry,rz); };
+  if(player && player.climbing){
+    bodyGroup.position.set(0,-0.48,-0.73);
+    const bobL = Math.sin(t*1.7) * 0.055 * Math.min(1, climbMove);
+    const bobR = Math.sin(t*1.7 + Math.PI) * 0.055 * Math.min(1, climbMove);
+    set(handL,-1,-.31,-.02+bobL,-.47,-.42,-.34,-.12);
+    set(handR, 1, .31,-.02+bobR,-.47,-.42, .34, .12);
+  } else {
+    bodyGroup.position.set(0,-0.55,-0.9);
+    const wl = webL && webL.active, wr = webR && webR.active;
+    set(handL,-1,-.44, wl ? -.03 : -.12, wl ? -.55 : -.39, wl ? -.42 : -.16, -.52, -.10);
+    set(handR, 1, .44, wr ? -.03 : -.12, wr ? -.55 : -.39, wr ? -.42 : -.16,  .52,  .10);
+  }
+}
 
 /* HUD canvas */
 const hudCanvas = document.createElement('canvas'); hudCanvas.width=1024; hudCanvas.height=320;
@@ -191,7 +236,7 @@ function drawHUD(){
   g.fillStyle='rgba(3,10,22,.50)'; roundedRect(g,40,24,944,255,28); g.fill();
   g.font='900 50px -apple-system, sans-serif'; g.textBaseline='middle';
   const kmh = Math.round(player.vel.length()*3.6);
-  const state = player.grounded ? (player.surface ? 'KATTO' : 'MAA') : ((webL.active||webR.active) ? 'SWING' : 'ILMA');
+  const state = player.climbing ? 'KIIPEILY' : (player.grounded ? (player.surface ? 'KATTO' : 'MAA') : ((webL.active||webR.active) ? 'SWING' : 'ILMA'));
   g.fillStyle='#f4f8ff'; g.textAlign='left'; g.fillText(kmh + ' km/h',70,76);
   g.font='800 34px -apple-system, sans-serif'; g.fillStyle='#a9b8d9';
   g.fillText('Korkeus ' + Math.round(player.pos.y-PLAYER_EYE) + ' m',70,134);
@@ -306,7 +351,11 @@ const player = {
   vel: new THREE.Vector3(0,0,-8),
   yaw: 0,
   grounded:false,
-  surface:null
+  surface:null,
+  climbing:false,
+  climbNormal:new THREE.Vector3(0,0,1),
+  climbTangent:new THREE.Vector3(1,0,0),
+  climbBuilding:null
 };
 rig.position.copy(player.pos);
 
@@ -326,7 +375,7 @@ function makeWeb(side){
   }
   const tip = new THREE.Mesh(new THREE.SphereGeometry(.34, 12, 8), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.72, depthWrite:false}));
   tip.visible=false; tip.renderOrder=9; scene.add(tip);
-  return {side, active:false, anchor:new THREE.Vector3(), length:0, targetLength:0, strands, tip, triggerWas:false, lastAttach:0};
+  return {side, active:false, shooting:false, shootEnd:new THREE.Vector3(), shootUntil:0, anchor:new THREE.Vector3(), length:0, targetLength:0, strands, tip, triggerWas:false, lastAttach:0};
 }
 const webL = makeWeb(-1);
 const webR = makeWeb(1);
@@ -372,15 +421,24 @@ function findAnchor(side){
   }
   return best;
 }
+function setWebVisible(w, visible){
+  for(const l of w.strands) l.visible = visible;
+  w.tip.visible = visible;
+}
+function fireMissWeb(w){
+  const v = getViewVectors();
+  const aim = v.dir.clone().multiplyScalar(.82).addScaledVector(v.right, w.side*.46).addScaledVector(_up, .12).normalize();
+  w.shooting = true; w.shootEnd.copy(player.pos).addScaledVector(aim, 58); w.shootUntil = performance.now() + 360;
+  setWebVisible(w, true);
+}
 function attachWeb(w){
   const a = findAnchor(w.side);
-  if(!a){ showNotice(w.side<0?'Vasen: ei pintaa':'Oikea: ei pintaa'); return; }
-  w.active=true; w.anchor.copy(a);
+  if(!a){ fireMissWeb(w); showNotice(w.side<0?'Vasen: ei pintaa':'Oikea: ei pintaa'); return; }
+  w.active=true; w.shooting=true; w.shootEnd.copy(a); w.shootUntil = performance.now() + 260; w.anchor.copy(a);
   const dist = player.pos.distanceTo(w.anchor);
   w.length = Math.max(16, dist * .98);
   w.targetLength = Math.max(13, dist * .68);
-  for(const l of w.strands) l.visible=true;
-  w.tip.visible=true; w.lastAttach=performance.now();
+  setWebVisible(w, true); w.lastAttach=performance.now();
 
   // Pehmeä lähtöimpulssi: ei vedä lasermaisesti suoraan pisteeseen, mutta antaa heti swing-kaaren.
   const to = _tmp.copy(w.anchor).sub(player.pos).normalize();
@@ -389,20 +447,23 @@ function attachWeb(w){
   player.vel.addScaledVector(to, 3.2);
   player.vel.addScaledVector(forwardFlat, 2.6);
   if(player.vel.y < 2.5) player.vel.y += 2.8;
-  player.grounded=false; player.surface=null;
+  player.grounded=false; player.surface=null; player.climbing=false; player.climbBuilding=null;
+  updateWebLine(w);
   showNotice(w.side<0?'Vasen seitti':'Oikea seitti');
 }
 function detachWeb(w){
-  w.active=false;
-  for(const l of w.strands) l.visible=false;
-  w.tip.visible=false;
+  w.active=false; w.shooting=false;
+  setWebVisible(w, false);
 }
 function updateWebLine(w){
-  if(!w.active) return;
-  const tNow = performance.now() * 0.004;
+  const now = performance.now();
+  if(!w.active && w.shooting && now > w.shootUntil){ w.shooting=false; setWebVisible(w,false); return; }
+  if(!w.active && !w.shooting) return;
+  setWebVisible(w, true);
+  const tNow = now * 0.004;
   const v = getViewVectors();
   const start = player.pos.clone().addScaledVector(v.right, w.side*.38).add(new THREE.Vector3(0,-.28,0));
-  const end = w.anchor;
+  const end = w.active ? w.anchor : w.shootEnd;
   const chord = end.clone().sub(start);
   const len = chord.length();
   const dir = chord.clone().normalize();
@@ -528,7 +589,7 @@ bindTouch('touchL','l'); bindTouch('touchR','r');
 /* fyysinen simulaatio */
 let mode=null, running=false, paused=false, lastT=0, hudAcc=0;
 function resetPlayer(){
-  player.pos.set(0,28,34); player.vel.set(0,0,-12); player.yaw=0; player.grounded=false; player.surface=null;
+  player.pos.set(0,30,36); player.vel.set(0,0,-12); player.yaw=0; player.grounded=false; player.surface=null; player.climbing=false; player.climbBuilding=null;
   detachWeb(webL); detachWeb(webR); score=0; showNotice('Reset');
 }
 function roofUnder(x,z, margin=-.15){
@@ -540,6 +601,79 @@ function roofUnder(x,z, margin=-.15){
   }
   return best;
 }
+
+function nearestWall(maxGap=1.8){
+  const foot = player.pos.y - PLAYER_EYE;
+  let best = null, bestGap = Infinity;
+  for(const b of buildings){
+    if(foot < -0.2 || foot > b.h + 2.2) continue;
+    const dx = player.pos.x - b.x, dz = player.pos.z - b.z;
+    const insideZ = Math.abs(dz) < b.d/2 + 1.25;
+    const insideX = Math.abs(dx) < b.w/2 + 1.25;
+    if(insideZ){
+      const gap = Math.abs(Math.abs(dx) - (b.w/2 + PLAYER_RADIUS*.82));
+      if(gap < maxGap && gap < bestGap){
+        const sx = Math.sign(dx || 1);
+        bestGap = gap;
+        best = {building:b, normal:new THREE.Vector3(sx,0,0), tangent:new THREE.Vector3(0,0,1), x:b.x + sx*(b.w/2 + PLAYER_RADIUS*.88), z:player.pos.z};
+      }
+    }
+    if(insideX){
+      const gap = Math.abs(Math.abs(dz) - (b.d/2 + PLAYER_RADIUS*.82));
+      if(gap < maxGap && gap < bestGap){
+        const sz = Math.sign(dz || 1);
+        bestGap = gap;
+        best = {building:b, normal:new THREE.Vector3(0,0,sz), tangent:new THREE.Vector3(1,0,0), x:player.pos.x, z:b.z + sz*(b.d/2 + PLAYER_RADIUS*.88)};
+      }
+    }
+  }
+  return best;
+}
+function attachClimb(){
+  const hit = nearestWall(2.4);
+  if(!hit){ showNotice('Ei seinää'); return false; }
+  detachWeb(webL); detachWeb(webR);
+  player.climbing = true; player.grounded = false; player.surface = null;
+  player.climbNormal.copy(hit.normal); player.climbTangent.copy(hit.tangent); player.climbBuilding = hit.building;
+  player.pos.x = hit.x; player.pos.z = hit.z;
+  player.vel.set(0,0,0);
+  showNotice('Tartu seinään');
+  return true;
+}
+function releaseClimb(jump, controls){
+  if(!player.climbing) return;
+  const v = getViewVectors();
+  const forwardFlat = v.dir.clone(); forwardFlat.y=0; if(forwardFlat.lengthSq()>.01) forwardFlat.normalize(); else forwardFlat.set(0,0,-1);
+  const n = player.climbNormal.clone();
+  player.climbing = false; player.climbBuilding = null;
+  if(jump){
+    player.vel.copy(n).multiplyScalar(9.5).addScaledVector(_up, 12.5).addScaledVector(forwardFlat, 5.2);
+    showNotice('Irti seinästä');
+  }
+}
+function stepClimb(dt, controls){
+  const hit = nearestWall(2.8);
+  if(!hit){ releaseClimb(false, controls); return; }
+  player.climbNormal.copy(hit.normal); player.climbTangent.copy(hit.tangent); player.climbBuilding = hit.building;
+  const b = hit.building;
+  const climbUp = -controls.pitch;
+  const climbSide = controls.steer;
+  const speed = 8.8;
+  player.pos.addScaledVector(player.climbTangent, climbSide * speed * dt);
+  player.pos.y += climbUp * speed * dt;
+  player.pos.x = hit.x; player.pos.z = hit.z;
+  player.vel.set(0,0,0);
+  const foot = player.pos.y - PLAYER_EYE;
+  if(foot > b.h + .05){
+    player.pos.y = b.h + PLAYER_EYE;
+    player.climbing = false; player.grounded = true; player.surface = b;
+    showNotice('Katolla');
+  } else if(foot < 0){
+    player.pos.y = PLAYER_EYE;
+  }
+  if(controls.actionPressed){ releaseClimb(true, controls); }
+}
+
 function resolveWorldCollisions(prevY){
   const prevFoot = prevY - PLAYER_EYE;
   const footY = player.pos.y - PLAYER_EYE;
@@ -596,6 +730,11 @@ function resolveWorldCollisions(prevY){
 }
 function physics(dt, controls){
   if(paused) return;
+  if(controls.climbPressed && !player.climbing) attachClimb();
+  if(player.climbing){
+    if(!controls.climbHeld){ releaseClimb(false, controls); }
+    else { stepClimb(dt, controls); rig.position.copy(player.pos); sky.position.copy(player.pos); updateWebLine(webL); updateWebLine(webR); return; }
+  }
   function handleWeb(w, down){ if(down && !w.triggerWas && !w.active) attachWeb(w); if(!down && w.active) detachWeb(w); w.triggerWas = down; }
   handleWeb(webL, controls.leftWeb);
   handleWeb(webR, controls.rightWeb);
@@ -627,23 +766,25 @@ function physics(dt, controls){
       showNotice('Hyppy');
     }
   } else {
-    // Ilmassa ohjaus: pieni korjaus katseen suuntaan, muttei helikopterimaista kääntymistä.
-    player.vel.y -= 17.8 * dt;
+    // Ilmassa ohjaus: pieni korjaus katseen suuntaan. Putoaminen kiihtyy selvästi, jotta korkeat hypyt tuntuvat oikeasti hurjilta.
+    const fallSpeed = Math.max(0, -player.vel.y);
+    const gravity = 24.5 + Math.min(11.5, fallSpeed * 0.16);
+    player.vel.y -= gravity * dt;
     player.vel.addScaledVector(rightFlat, controls.steer * 12.5 * dt);
     player.vel.addScaledVector(forwardFlat, -controls.pitch * 7.5 * dt);
   }
 
   if(webL.active || webR.active){
-    player.grounded=false; player.surface=null;
+    player.grounded=false; player.surface=null; player.climbing=false; player.climbBuilding=null;
     webPhysics(webL, dt, controls.actionHeld);
     webPhysics(webR, dt, controls.actionHeld);
     if(controls.actionHeld) score += 4*dt;
   }
 
   // Vastus: maassa reippaampi, ilmassa kevyt. Tämä pitää VR-mukavuuden kurissa mutta säilyttää swing-vauhdin.
-  const drag = player.grounded ? Math.pow(.985, dt*60) : Math.pow(.996, dt*60);
+  const drag = player.grounded ? Math.pow(.985, dt*60) : ((webL.active || webR.active) ? Math.pow(.997, dt*60) : Math.pow(.999, dt*60));
   player.vel.multiplyScalar(drag);
-  const maxSpeed = (webL.active || webR.active) ? 78 : 62;
+  const maxSpeed = (webL.active || webR.active) ? 104 : 92;
   if(player.vel.length() > maxSpeed) player.vel.setLength(maxSpeed);
 
   const prevY = player.pos.y;
@@ -684,11 +825,15 @@ window.addEventListener('resize', resize); window.addEventListener('orientationc
 
 function collectControls(){
   const p = getPad();
-  let leftWeb = touchState.l, rightWeb = touchState.r, actionHeld=false, actionPressed=false, steer=0, pitch=0;
+  let leftWeb = touchState.l, rightWeb = touchState.r, actionHeld=false, actionPressed=false, steer=0, pitch=0, climbHeld=false, climbPressed=false;
   if(p){
     updatePadStatus(p);
-    leftWeb = leftWeb || ((p.buttons[6] && p.buttons[6].value>.18) || (p.buttons[4] && p.buttons[4].pressed));
-    rightWeb = rightWeb || ((p.buttons[7] && p.buttons[7].value>.18) || (p.buttons[5] && p.buttons[5].pressed));
+    leftWeb = leftWeb || ((p.buttons[6] && p.buttons[6].value>.18));
+    rightWeb = rightWeb || ((p.buttons[7] && p.buttons[7].value>.18));
+    climbHeld = !!((p.buttons[4] && p.buttons[4].pressed) || (p.buttons[5] && p.buttons[5].pressed));
+    const climbPressedL = pressed(p,4);
+    const climbPressedR = pressed(p,5);
+    climbPressed = climbPressedL || climbPressedR;
     actionHeld = !!(p.buttons[0] && p.buttons[0].pressed);
     actionPressed = pressed(p,0);
     steer = dz(p.axes[0]||0);
@@ -701,7 +846,7 @@ function collectControls(){
     if(pressed(p,12)) adjustFov(1);
     if(pressed(p,13)) adjustFov(-1);
   }
-  return {leftWeb,rightWeb,actionHeld,actionPressed,steer,pitch};
+  return {leftWeb,rightWeb,actionHeld,actionPressed,steer,pitch,climbHeld,climbPressed};
 }
 
 function loop(t){
@@ -709,6 +854,7 @@ function loop(t){
   const dt = Math.min(.045, (t-lastT)/1000 || .016); lastT=t;
   if(!running) return;
   const controls = collectControls();
+  updateHands(controls);
 
   if(mode==='vr' && haveOrientation) head.quaternion.copy(calQ).multiply(deviceQ);
   else head.quaternion.setFromEuler(new THREE.Euler(monoPitch, monoYaw, 0, 'YXZ'));
