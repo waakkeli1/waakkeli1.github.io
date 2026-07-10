@@ -58,14 +58,14 @@
 
 <div id="start" class="overlay">
   <div class="inner">
-    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.3.0-fall-web-hands-climb</div>
+    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.4.0-fall-mantle-strafe</div>
     <h1>WEB <em>SWINGER</em> VR</h1>
     <p class="sub">First person -kaupunkikeinunta passiivisille VR-laseille. Vasen ja oikea triggeri ampuvat valkoiset seitit rakennuksiin. Laskeudu katoille, juokse tateilla, hyppää alas ja tartu seiniin L1/R1:llä kiipeilyä varten.</p>
     <div id="padStatus" class="pad-status">Ohjain: paina mitä tahansa nappia herättääksesi…</div>
     <div class="cardrow">
       <div class="card"><b>Vasen/oikea seitti</b><span>L2 ja R2 tarttuvat korkeisiin rakennuksiin. X/A pumppaa vauhtia tai hyppää katolta.</span></div>
       <div class="card"><b>VR-kalibrointi</b><span>D-pad vasen/oikea säätää IPD:tä, ylös/alas FOVia.</span></div>
-      <div class="card"><b>Katot, kävely & kiipeily</b><span>Katoille voi laskeutua. L1/R1 tarttuu seinään, tatti kiipeää, X/A hyppää irti.</span></div>
+      <div class="card"><b>Katot, kävely & kiipeily</b><span>Katoille voi laskeutua. L1/R1 tarttuu seinään, tatti kiipeää ylös/alas ja sivulle, katolle noustaan automaattisesti kynnyksen yli.</span></div>
     </div>
     <div class="btns">
       <button id="btnVR">Pelaa VR:ssä</button>
@@ -74,7 +74,7 @@
     </div>
     <p class="hint">
       <b>R2</b> oikea seitti · <b>L2</b> vasen seitti · <b>X/A</b> hyppy / swing-boost · <b>vasen tatti</b> kävely ja ilmakorjaus<br>
-      <b>L1/R1</b> tartu seinään / kiipeily · <b>△/Y</b> keskitä · <b>○/B</b> resetoi · <b>Options</b> pause · <b>D-pad</b> IPD/FOV<br>
+      <b>L1/R1</b> tartu seinään / kiipeily + sivuttaisliike · <b>△/Y</b> keskitä · <b>○/B</b> resetoi · <b>Options</b> pause · <b>D-pad</b> IPD/FOV<br>
       2D-testissä voit katsoa ympärille vetämällä ruutua. Touch-painikkeet näkyvät vain ilman ohjainta.
     </p>
   </div>
@@ -85,7 +85,7 @@
 'use strict';
 
 /* näkyvä virheruutu */
-const VERSION = '0.3.0-fall-web-hands-climb';
+const VERSION = '0.4.0-fall-mantle-strafe';
 const errorBox = document.getElementById('errorBox');
 window.addEventListener('error', function(e){
   const msg = 'Web Swinger VR kaatui:\n\n' + (e.message || 'tuntematon virhe') + '\n\nVersion: ' + VERSION;
@@ -360,6 +360,11 @@ const player = {
 rig.position.copy(player.pos);
 
 const WEB_SEGMENTS = 13;
+const FALL_GRAVITY_BASE = 34;
+const FALL_GRAVITY_SPEED_GAIN = 0.33;
+const FALL_GRAVITY_MAX_EXTRA = 28;
+const FREEFALL_MAX_SPEED = 132;
+const SWING_MAX_SPEED = 118;
 function makeWeb(side){
   const strands = [];
   for(let j=0;j<5;j++){
@@ -647,27 +652,58 @@ function releaseClimb(jump, controls){
   const n = player.climbNormal.clone();
   player.climbing = false; player.climbBuilding = null;
   if(jump){
-    player.vel.copy(n).multiplyScalar(9.5).addScaledVector(_up, 12.5).addScaledVector(forwardFlat, 5.2);
+    player.vel.copy(n).multiplyScalar(9.5).addScaledVector(_up, 13.8).addScaledVector(forwardFlat, 6.2);
     showNotice('Irti seinästä');
   }
 }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function mantleToRoof(b, normal){
+  // Automaattinen ylitys katon reunan yli: pelaajaa siirretään seinän ulkopuolelta hieman katon sisäpuolelle.
+  const inset = PLAYER_RADIUS + 1.45;
+  if(Math.abs(normal.x) > .5){
+    player.pos.x = b.x + normal.x * (b.w/2 - inset);
+    player.pos.z = clamp(player.pos.z, b.z-b.d/2+inset, b.z+b.d/2-inset);
+  } else {
+    player.pos.z = b.z + normal.z * (b.d/2 - inset);
+    player.pos.x = clamp(player.pos.x, b.x-b.w/2+inset, b.x+b.w/2-inset);
+  }
+  player.pos.y = b.h + PLAYER_EYE + .03;
+  player.vel.set(0,0,0);
+  player.climbing = false; player.climbBuilding = null;
+  player.grounded = true; player.surface = b;
+  detachWeb(webL); detachWeb(webR);
+  showNotice('Katolle');
+}
 function stepClimb(dt, controls){
-  const hit = nearestWall(2.8);
+  const hit = nearestWall(3.1);
   if(!hit){ releaseClimb(false, controls); return; }
   player.climbNormal.copy(hit.normal); player.climbTangent.copy(hit.tangent); player.climbBuilding = hit.building;
   const b = hit.building;
+  const n = hit.normal.clone();
   const climbUp = -controls.pitch;
   const climbSide = controls.steer;
-  const speed = 8.8;
-  player.pos.addScaledVector(player.climbTangent, climbSide * speed * dt);
-  player.pos.y += climbUp * speed * dt;
-  player.pos.x = hit.x; player.pos.z = hit.z;
+  const speedUp = 9.6;
+  const speedSide = 9.4;
+
+  // Tatti vasen/oikea liikuttaa oikeasti sivusuunnassa seinää pitkin.
+  player.pos.addScaledVector(player.climbTangent, climbSide * speedSide * dt);
+  player.pos.y += climbUp * speedUp * dt;
+
+  // Pidetään pelaaja samalla seinäpinnalla, mutta ei yliajeta tangenttisuuntaa.
+  const insetSide = PLAYER_RADIUS * .88;
+  if(Math.abs(n.x) > .5){
+    player.pos.x = b.x + n.x * (b.w/2 + insetSide);
+    player.pos.z = clamp(player.pos.z, b.z-b.d/2+PLAYER_RADIUS*.75, b.z+b.d/2-PLAYER_RADIUS*.75);
+  } else {
+    player.pos.z = b.z + n.z * (b.d/2 + insetSide);
+    player.pos.x = clamp(player.pos.x, b.x-b.w/2+PLAYER_RADIUS*.75, b.x+b.w/2-PLAYER_RADIUS*.75);
+  }
   player.vel.set(0,0,0);
+
   const foot = player.pos.y - PLAYER_EYE;
-  if(foot > b.h + .05){
-    player.pos.y = b.h + PLAYER_EYE;
-    player.climbing = false; player.grounded = true; player.surface = b;
-    showNotice('Katolla');
+  if(foot >= b.h - .28 && climbUp >= -.05){
+    mantleToRoof(b, n);
+    return;
   } else if(foot < 0){
     player.pos.y = PLAYER_EYE;
   }
@@ -766,12 +802,13 @@ function physics(dt, controls){
       showNotice('Hyppy');
     }
   } else {
-    // Ilmassa ohjaus: pieni korjaus katseen suuntaan. Putoaminen kiihtyy selvästi, jotta korkeat hypyt tuntuvat oikeasti hurjilta.
+    // Ilmassa ohjaus: pieni korjaus katseen suuntaan.
+    // v0.4: selvästi rajumpi putoamiskiihtyvyys, joka kasvaa vauhdin mukana.
     const fallSpeed = Math.max(0, -player.vel.y);
-    const gravity = 24.5 + Math.min(11.5, fallSpeed * 0.16);
+    const gravity = FALL_GRAVITY_BASE + Math.min(FALL_GRAVITY_MAX_EXTRA, fallSpeed * FALL_GRAVITY_SPEED_GAIN);
     player.vel.y -= gravity * dt;
-    player.vel.addScaledVector(rightFlat, controls.steer * 12.5 * dt);
-    player.vel.addScaledVector(forwardFlat, -controls.pitch * 7.5 * dt);
+    player.vel.addScaledVector(rightFlat, controls.steer * 11.5 * dt);
+    player.vel.addScaledVector(forwardFlat, -controls.pitch * 6.6 * dt);
   }
 
   if(webL.active || webR.active){
@@ -782,9 +819,9 @@ function physics(dt, controls){
   }
 
   // Vastus: maassa reippaampi, ilmassa kevyt. Tämä pitää VR-mukavuuden kurissa mutta säilyttää swing-vauhdin.
-  const drag = player.grounded ? Math.pow(.985, dt*60) : ((webL.active || webR.active) ? Math.pow(.997, dt*60) : Math.pow(.999, dt*60));
+  const drag = player.grounded ? Math.pow(.985, dt*60) : ((webL.active || webR.active) ? Math.pow(.997, dt*60) : Math.pow(.9995, dt*60));
   player.vel.multiplyScalar(drag);
-  const maxSpeed = (webL.active || webR.active) ? 104 : 92;
+  const maxSpeed = (webL.active || webR.active) ? SWING_MAX_SPEED : FREEFALL_MAX_SPEED;
   if(player.vel.length() > maxSpeed) player.vel.setLength(maxSpeed);
 
   const prevY = player.pos.y;
