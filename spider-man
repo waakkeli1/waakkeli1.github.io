@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Web Swinger VR City</title>
+<style>
+  :root{
+    --bg0:#08111f; --bg1:#101c35; --panel:rgba(3,10,22,.72);
+    --ink:#f4f8ff; --muted:#a9b8d9; --cyan:#69e8ff; --red:#ff5f7c; --gold:#ffd271;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#020610;color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;background:#020610}
+  .overlay{position:fixed;inset:0;z-index:20;display:flex;overflow-y:auto;touch-action:pan-y;
+    padding:calc(18px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left));
+    background:
+      radial-gradient(circle at 20% 20%, rgba(105,232,255,.18), transparent 28%),
+      radial-gradient(circle at 84% 75%, rgba(255,95,124,.16), transparent 30%),
+      linear-gradient(160deg,#050814 0%,#101c35 48%,#27113a 100%);
+    transition:opacity .35s;-webkit-overflow-scrolling:touch}
+  .overlay.hidden{opacity:0;pointer-events:none}
+  .inner{margin:auto;max-width:720px;width:100%;display:flex;flex-direction:column;align-items:center;text-align:center}
+  .eyebrow{font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--cyan);font-weight:800;margin-bottom:10px}
+  h1{font-size:clamp(36px,8vw,70px);line-height:.95;letter-spacing:-.05em;font-weight:900;text-shadow:0 8px 44px rgba(105,232,255,.26)}
+  h1 em{font-style:normal;color:var(--red)}
+  .sub{margin-top:14px;color:var(--muted);line-height:1.55;font-size:15px;max-width:560px}
+  .pad-status{margin-top:18px;border:1px solid rgba(105,232,255,.36);background:rgba(3,10,22,.36);padding:9px 15px;border-radius:999px;color:var(--muted);font-size:13px}
+  .pad-status.ok{color:#94ffcb;border-color:#94ffcb}
+  .btns{margin-top:22px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  button{font:inherit;font-weight:800;font-size:16px;border:0;border-radius:16px;padding:15px 22px;color:#04101a;background:var(--cyan);box-shadow:0 12px 32px rgba(105,232,255,.18);cursor:pointer}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid rgba(244,248,255,.32);box-shadow:none}
+  button.red{background:var(--red);color:white;box-shadow:0 12px 32px rgba(255,95,124,.17)}
+  button:active{transform:scale(.98)}
+  .hint{margin-top:20px;color:var(--muted);font-size:12px;line-height:1.75;max-width:650px}
+  .hint b{color:var(--ink)}
+  .cardrow{margin-top:18px;display:grid;grid-template-columns:repeat(3,minmax(130px,1fr));gap:10px;width:min(620px,100%)}
+  .card{background:rgba(3,10,22,.42);border:1px solid rgba(244,248,255,.16);border-radius:16px;padding:13px 12px;text-align:left}
+  .card b{display:block;color:var(--cyan);font-size:13px;margin-bottom:5px}.card span{display:block;color:var(--muted);font-size:11px;line-height:1.35}
+  #divider{display:none;position:fixed;left:50%;top:0;width:3px;height:100%;margin-left:-1.5px;background:#020610;z-index:5;pointer-events:none}
+  #errorBox{display:none;position:fixed;left:14px;right:14px;top:14px;z-index:60;background:rgba(35,0,18,.92);color:#fff;border:1px solid rgba(255,95,124,.8);border-radius:14px;padding:14px;font-family:ui-monospace,Menlo,monospace;font-size:13px;white-space:pre-wrap;box-shadow:0 18px 60px rgba(0,0,0,.4)}
+  #rotate{display:none;position:fixed;inset:0;z-index:55;align-items:center;justify-content:center;text-align:center;background:#020610;color:var(--ink);font-size:18px;font-weight:800;padding:30px}
+  #touch{position:fixed;inset:auto 0 0 0;z-index:7;display:none;pointer-events:none;padding:0 18px calc(14px + env(safe-area-inset-bottom));justify-content:space-between}
+  #touch button{pointer-events:auto;opacity:.35;min-width:118px;border:1px solid rgba(255,255,255,.25);background:rgba(10,18,34,.45);color:white;box-shadow:none}
+  @media(max-height:560px){.eyebrow{font-size:10px;margin-bottom:5px}h1{font-size:32px}.sub{font-size:12px;margin-top:7px}.btns{margin-top:12px}.hint{font-size:10px;margin-top:10px}.cardrow{display:none}button{font-size:14px;padding:11px 15px}.pad-status{margin-top:10px;font-size:11px;padding:7px 12px}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="errorBox"></div>
+<div id="divider"></div>
+<div id="rotate"><div>Käännä puhelin vaakatasoon VR-tilaa varten 🕸️</div></div>
+<div id="touch"><button id="touchL">VASEN SEITTI</button><button id="touchR">OIKEA SEITTI</button></div>
+
+<div id="start" class="overlay">
+  <div class="inner">
+    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.1.0-web-swinger-city</div>
+    <h1>WEB <em>SWINGER</em> VR</h1>
+    <p class="sub">First person -kaupunkikeinunta passiivisille VR-laseille. Ammu vasen ja oikea seitti eri triggereillä, ota vauhtia korkeista rakennuksista ja lennä katujen yläpuolella.</p>
+    <div id="padStatus" class="pad-status">Ohjain: paina mitä tahansa nappia herättääksesi…</div>
+    <div class="cardrow">
+      <div class="card"><b>Vasen/oikea seitti</b><span>L2 ja R2 tarttuvat lähimpään sopivaan rakennuksen sivuun.</span></div>
+      <div class="card"><b>VR-kalibrointi</b><span>D-pad vasen/oikea säätää IPD:tä, ylös/alas FOVia.</span></div>
+      <div class="card"><b>Mukavuus</b><span>Ei automaattista kameran pyöritystä. Pää ohjaa katsesuuntaa.</span></div>
+    </div>
+    <div class="btns">
+      <button id="btnVR">Pelaa VR:ssä</button>
+      <button id="btnMono" class="ghost">Testaa ilman laseja (2D)</button>
+      <button id="btnCal" class="red">Kalibrointitesti</button>
+    </div>
+    <p class="hint">
+      <b>R2</b> oikea seitti · <b>L2</b> vasen seitti · <b>X/A</b> vedä/boostaa seittiin · <b>vasen tatti</b> ilmassa ohjaus<br>
+      <b>△/Y</b> keskitä näkymä · <b>○/B</b> resetoi kadulle · <b>Options</b> pause · <b>D-pad</b> IPD/FOV<br>
+      2D-testissä voit katsoa ympärille vetämällä ruutua. Touch-painikkeet näkyvät vain ilman ohjainta.
+    </p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+/* näkyvä virheruutu */
+const VERSION = '0.1.0-web-swinger-city';
+const errorBox = document.getElementById('errorBox');
+window.addEventListener('error', function(e){
+  const msg = 'Web Swinger VR kaatui:\n\n' + (e.message || 'tuntematon virhe') + '\n\nVersion: ' + VERSION;
+  errorBox.textContent = msg; errorBox.style.display = 'block'; console.error(e.error || e.message || e);
+});
+window.addEventListener('unhandledrejection', function(e){
+  const msg = 'Web Swinger VR kaatui async-virheeseen:\n\n' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '\n\nVersion: ' + VERSION;
+  errorBox.textContent = msg; errorBox.style.display = 'block'; console.error(e.reason);
+});
+if(!window.THREE){
+  errorBox.textContent = 'three.js ei latautunut. Tarkista verkkoyhteys.\nVersion: ' + VERSION;
+  errorBox.style.display = 'block'; throw new Error('THREE puuttuu');
+}
+
+/* canvas ja renderer */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.setClearColor(0x06101f, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0b1830, 80, 520);
+
+/* perusvalot ja taivas */
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite:false, fog:false,
+  uniforms:{ top:{value:new THREE.Color('#071027')}, mid:{value:new THREE.Color('#14254d')}, bot:{value:new THREE.Color('#2c1f46')} },
+  vertexShader:'varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:'varying vec3 vP; uniform vec3 top,mid,bot; void main(){ float h=normalize(vP).y; vec3 c=h>0.15?mix(mid,top,smoothstep(0.15,0.8,h)):mix(bot,mid,smoothstep(-0.15,0.15,h)); gl_FragColor=vec4(c,1.0); }'
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(2500, 28, 14), skyMat); scene.add(sky);
+scene.add(new THREE.HemisphereLight(0x7cbcff, 0x090812, 0.9));
+const moon = new THREE.DirectionalLight(0xb6d9ff, 1.2); moon.position.set(-0.35,0.9,0.3); scene.add(moon);
+const cityGlow = new THREE.PointLight(0x69e8ff, 1.3, 500); cityGlow.position.set(0,80,-60); scene.add(cityGlow);
+
+/* tekstuurit */
+function roundedRect(ctx,x,y,w,h,r){
+  if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); return; }
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r);
+}
+function makeWindowTexture(base, lit){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0,0,c.width,c.height);
+  g.fillStyle = 'rgba(255,255,255,0.04)';
+  for(let y=0;y<512;y+=44){ g.fillRect(0,y,256,1); }
+  for(let x=0;x<256;x+=44){ g.fillRect(x,0,1,512); }
+  for(let y=24;y<500;y+=38){
+    for(let x=18;x<245;x+=34){
+      const on = Math.random() < lit;
+      g.fillStyle = on ? (Math.random()<.55?'#ffd271':'#69e8ff') : 'rgba(6,14,28,.8)';
+      g.globalAlpha = on ? (0.55+Math.random()*0.35) : 0.45;
+      g.fillRect(x,y,12+Math.random()*6,14+Math.random()*8);
+    }
+  }
+  g.globalAlpha=1;
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 2;
+  return t;
+}
+const roadMat = new THREE.MeshLambertMaterial({color:0x161c2a});
+const sidewalkMat = new THREE.MeshLambertMaterial({color:0x1e2538});
+const laneMat = new THREE.MeshBasicMaterial({color:0xbcd7ff});
+const webMatL = new THREE.LineBasicMaterial({color:0x69e8ff, transparent:true, opacity:0.92});
+const webMatR = new THREE.LineBasicMaterial({color:0xff5f7c, transparent:true, opacity:0.92});
+const anchorMat = new THREE.MeshBasicMaterial({color:0xffd271, transparent:true, opacity:.75, depthWrite:false});
+
+/* pelaajan VR-rigi */
+const rig = new THREE.Group(); scene.add(rig);
+const head = new THREE.Group(); rig.add(head);
+const camL = new THREE.PerspectiveCamera(78, 1, 0.04, 1800);
+const camR = new THREE.PerspectiveCamera(78, 1, 0.04, 1800);
+const camM = new THREE.PerspectiveCamera(76, 1, 0.04, 1800);
+camL.position.x = -0.032; camR.position.x = 0.032;
+head.add(camL); head.add(camR); head.add(camM);
+
+/* pieni first-person torso/kädet */
+const bodyGroup = new THREE.Group(); head.add(bodyGroup); bodyGroup.position.set(0,-0.55,-0.9);
+const handMatL = new THREE.MeshLambertMaterial({color:0x4edfff});
+const handMatR = new THREE.MeshLambertMaterial({color:0xff4d70});
+function makeHand(side, mat){
+  const g = new THREE.Group();
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.045,0.42,10), mat);
+  arm.rotation.z = side*0.45; arm.rotation.x = Math.PI/2.6; arm.position.set(side*.38,-.05,-.18); g.add(arm);
+  const fist = new THREE.Mesh(new THREE.SphereGeometry(0.07,12,8), mat); fist.position.set(side*.48,-.12,-.38); g.add(fist);
+  return g;
+}
+bodyGroup.add(makeHand(-1, handMatL)); bodyGroup.add(makeHand(1, handMatR));
+
+/* HUD canvas */
+const hudCanvas = document.createElement('canvas'); hudCanvas.width=1024; hudCanvas.height=320;
+const hudCtx = hudCanvas.getContext('2d');
+const hudTex = new THREE.CanvasTexture(hudCanvas);
+const hud = new THREE.Mesh(new THREE.PlaneGeometry(1.35, .42), new THREE.MeshBasicMaterial({map:hudTex, transparent:true, depthWrite:false, depthTest:false, fog:false}));
+hud.renderOrder = 10; hud.position.set(0,-.36,-1.75); head.add(hud);
+function drawHUD(){
+  const g=hudCtx; g.clearRect(0,0,1024,320);
+  g.fillStyle='rgba(3,10,22,.50)'; roundedRect(g,40,24,944,255,28); g.fill();
+  g.font='900 50px -apple-system, sans-serif'; g.textBaseline='middle';
+  const kmh = Math.round(player.vel.length()*3.6);
+  g.fillStyle='#f4f8ff'; g.textAlign='left'; g.fillText(kmh + ' km/h',70,82);
+  g.font='800 34px -apple-system, sans-serif'; g.fillStyle='#a9b8d9';
+  g.fillText('Korkeus ' + Math.round(player.pos.y) + ' m',70,142);
+  g.fillText('Score ' + Math.floor(score),70,198);
+  g.textAlign='right';
+  g.fillStyle = webL.active ? '#69e8ff' : '#5e6b80'; g.fillText('L2 ' + (webL.active?'KIINNI':'vapaa'),954,82);
+  g.fillStyle = webR.active ? '#ff5f7c' : '#5e6b80'; g.fillText('R2 ' + (webR.active?'KIINNI':'vapaa'),954,132);
+  g.fillStyle='#ffd271'; g.fillText('IPD ' + lensShiftPx + ' · FOV ' + eyeFov,954,196);
+  g.fillStyle='rgba(244,248,255,.55)'; g.font='700 24px -apple-system, sans-serif';
+  g.fillText('v' + VERSION,954,244);
+  hudTex.needsUpdate = true;
+}
+
+/* toast */
+const toastCanvas = document.createElement('canvas'); toastCanvas.width=900; toastCanvas.height=150;
+const toastCtx = toastCanvas.getContext('2d'); const toastTex = new THREE.CanvasTexture(toastCanvas);
+const toast = new THREE.Mesh(new THREE.PlaneGeometry(1.2,.2), new THREE.MeshBasicMaterial({map:toastTex, transparent:true, depthWrite:false, depthTest:false, fog:false}));
+toast.position.set(0,.2,-1.55); toast.renderOrder=11; toast.visible=false; head.add(toast);
+let noticeUntil=0;
+function showNotice(txt){
+  const g=toastCtx; g.clearRect(0,0,900,150); g.fillStyle='rgba(3,10,22,.72)'; roundedRect(g,50,20,800,110,26); g.fill();
+  g.fillStyle='#ffd271'; g.font='900 56px -apple-system,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,450,78);
+  toastTex.needsUpdate=true; toast.visible=true; noticeUntil=performance.now()+2200;
+}
+
+/* kalibrointi */
+let lensShiftPx = -76;
+let eyeFov = 78;
+function applyEyeSettings(){
+  const w = window.innerWidth, h = window.innerHeight;
+  camL.fov = eyeFov; camR.fov = eyeFov; camM.fov = Math.max(58, eyeFov-2);
+  if(w>0 && h>0){
+    camL.setViewOffset(w/2,h, lensShiftPx,0,w/2,h);
+    camR.setViewOffset(w/2,h,-lensShiftPx,0,w/2,h);
+  }
+  camL.updateProjectionMatrix(); camR.updateProjectionMatrix(); camM.updateProjectionMatrix();
+  localStorage.setItem('webSwingerLens', JSON.stringify({lensShiftPx, eyeFov}));
+}
+try{ const saved = JSON.parse(localStorage.getItem('webSwingerLens')||'null'); if(saved){ lensShiftPx=saved.lensShiftPx; eyeFov=saved.eyeFov; } }catch(e){}
+function adjustLens(d){ lensShiftPx = Math.max(-140, Math.min(140, lensShiftPx + d*4)); applyEyeSettings(); showNotice('IPD/offset ' + lensShiftPx); }
+function adjustFov(d){ eyeFov = Math.max(58, Math.min(104, eyeFov - d*2)); applyEyeSettings(); showNotice('FOV ' + eyeFov); }
+
+/* kaupunki */
+const city = new THREE.Group(); scene.add(city);
+const anchors = [];
+const buildings = [];
+function rand(a,b){ return a + Math.random()*(b-a); }
+function createCity(){
+  // maa
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200,1200), new THREE.MeshLambertMaterial({color:0x07101b}));
+  ground.rotation.x = -Math.PI/2; ground.position.y = 0; city.add(ground);
+  // leveät kadut gridinä
+  for(let x=-540;x<=540;x+=60){
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(22,1180), roadMat); road.rotation.x=-Math.PI/2; road.position.set(x,.012,0); city.add(road);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(.7,1180), laneMat); line.rotation.x=-Math.PI/2; line.position.set(x,.025,0); city.add(line);
+  }
+  for(let z=-540;z<=540;z+=60){
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(1180,22), roadMat); road.rotation.x=-Math.PI/2; road.position.set(0,.014,z); city.add(road);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(1180,.7), laneMat); line.rotation.x=-Math.PI/2; line.position.set(0,.026,z); city.add(line);
+  }
+  const mats = [
+    new THREE.MeshLambertMaterial({map:makeWindowTexture('#111b2f',.36)}),
+    new THREE.MeshLambertMaterial({map:makeWindowTexture('#172137',.29)}),
+    new THREE.MeshLambertMaterial({map:makeWindowTexture('#101727',.43)}),
+    new THREE.MeshLambertMaterial({map:makeWindowTexture('#1a1830',.34)})
+  ];
+  let idx=0;
+  for(let gx=-8; gx<=8; gx++){
+    for(let gz=-8; gz<=8; gz++){
+      if(Math.abs(gx)<1 && Math.abs(gz)<1) continue; // startille aukio
+      if(Math.random()<.08) continue;
+      const cx = gx*60 + rand(-9,9), cz = gz*60 + rand(-9,9);
+      const w = rand(18,32), d = rand(18,32);
+      let h = rand(22,100);
+      if(Math.abs(gx)<=3 || Math.abs(gz)<=3) h += rand(30,90); // keskustaan korkeampia
+      const mat = mats[idx++%mats.length];
+      if(mat.map){ mat.map.repeat.set(Math.max(1,w/22), Math.max(1,h/34)); }
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+      mesh.position.set(cx,h/2,cz); city.add(mesh);
+      // katto ja hohtava reuna
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(w*1.02,.8,d*1.02), new THREE.MeshLambertMaterial({color:0x222c44})); roof.position.set(cx,h+.4,cz); city.add(roof);
+      if(Math.random()<.28){
+        const sign = new THREE.Mesh(new THREE.BoxGeometry(w*.5,2,.45), new THREE.MeshBasicMaterial({color: Math.random()<.5?0x69e8ff:0xff5f7c}));
+        sign.position.set(cx,h*.75,cz-d/2-.26); city.add(sign);
+      }
+      const b = {x:cx,z:cz,w,d,h,mesh}; buildings.push(b);
+      // ankkuripisteitä sivuille ja kulmiin. Nämä ovat seitin tarttumapintoja.
+      const heights = [h*.55, h*.72, h*.9, h+1.5].filter(v=>v>14);
+      for(const y of heights){
+        anchors.push(new THREE.Vector3(cx-w/2-.8,y,cz)); anchors.push(new THREE.Vector3(cx+w/2+.8,y,cz));
+        anchors.push(new THREE.Vector3(cx,y,cz-d/2-.8)); anchors.push(new THREE.Vector3(cx,y,cz+d/2+.8));
+        anchors.push(new THREE.Vector3(cx-w/2,y,cz-d/2)); anchors.push(new THREE.Vector3(cx+w/2,y,cz+d/2));
+      }
+    }
+  }
+  // aloitusaukion valokehät
+  const ringGeo = new THREE.TorusGeometry(12,.22,8,70);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0x69e8ff, transparent:true, opacity:.5}));
+  ring.rotation.x=Math.PI/2; ring.position.set(0,.15,0); city.add(ring);
+}
+createCity();
+
+/* ankkuri-highlight */
+const anchorOrb = new THREE.Mesh(new THREE.SphereGeometry(.7,16,8), anchorMat); anchorOrb.visible=false; scene.add(anchorOrb);
+
+/* pelaaja ja seitit */
+const player = {
+  pos: new THREE.Vector3(0,16,18),
+  vel: new THREE.Vector3(0,0,-8),
+  yaw: 0,
+  grounded:false
+};
+rig.position.copy(player.pos);
+
+function makeWeb(side){
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const line = new THREE.Line(geo, side<0?webMatL:webMatR); line.visible=false; scene.add(line);
+  return {side, active:false, anchor:new THREE.Vector3(), length:0, line, triggerWas:false, lastAttach:0};
+}
+const webL = makeWeb(-1);
+const webR = makeWeb(1);
+let bestAnchorL = null, bestAnchorR = null;
+let score = 0;
+
+const _dir = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3(0,1,0);
+const _tmp = new THREE.Vector3();
+function getViewVectors(){
+  const q = new THREE.Quaternion(); head.getWorldQuaternion(q);
+  _dir.set(0,0,-1).applyQuaternion(q).normalize();
+  _right.crossVectors(_dir, _up).normalize();
+  if(_right.lengthSq()<.01) _right.set(1,0,0);
+  return {dir:_dir, right:_right};
+}
+function findAnchor(side){
+  const v = getViewVectors();
+  const p = player.pos;
+  let best = null, bestScore = Infinity;
+  for(const a of anchors){
+    _tmp.copy(a).sub(p);
+    const dist = _tmp.length();
+    if(dist < 12 || dist > 145) continue;
+    const n = _tmp.clone().normalize();
+    const ahead = n.dot(v.dir);
+    if(ahead < 0.05) continue;
+    const sideDot = n.dot(v.right) * side;
+    // L2 suosii vasenta ja R2 oikeaa, mutta sallii myös etuviistot tartunnat.
+    if(sideDot < -0.38) continue;
+    const heightBonus = Math.max(0, a.y - p.y) * .15;
+    const s = dist - ahead*55 - Math.max(0,sideDot)*35 - heightBonus;
+    if(s < bestScore){ bestScore = s; best = a; }
+  }
+  return best;
+}
+function attachWeb(w){
+  const a = findAnchor(w.side);
+  if(!a){ showNotice(w.side<0?'Vasen: ei pintaa':'Oikea: ei pintaa'); return; }
+  w.active=true; w.anchor.copy(a);
+  w.length = Math.max(8, player.pos.distanceTo(w.anchor) * .92);
+  w.line.visible=true; w.lastAttach=performance.now();
+  showNotice(w.side<0?'Vasen seitti':'Oikea seitti');
+}
+function detachWeb(w){ w.active=false; w.line.visible=false; }
+function updateWebLine(w){
+  if(!w.active) return;
+  const start = player.pos.clone();
+  const sideOffset = getViewVectors().right.clone().multiplyScalar(w.side*.36);
+  start.add(sideOffset).add(new THREE.Vector3(0,-.25,0));
+  const arr = w.line.geometry.attributes.position.array;
+  arr[0]=start.x; arr[1]=start.y; arr[2]=start.z;
+  arr[3]=w.anchor.x; arr[4]=w.anchor.y; arr[5]=w.anchor.z;
+  w.line.geometry.attributes.position.needsUpdate=true;
+}
+function webPhysics(w,dt,reel){
+  if(!w.active) return;
+  const to = _tmp.copy(w.anchor).sub(player.pos);
+  const dist = to.length(); if(dist<.001) return;
+  const dir = to.multiplyScalar(1/dist);
+  if(reel){
+    w.length = Math.max(7, w.length - 28*dt);
+    player.vel.addScaledVector(dir, 18*dt);
+  } else {
+    // automaattinen pieni kiristys tekee pelistä mobiilissa hauskemman
+    w.length = Math.max(9, w.length - 4*dt);
+  }
+  const stretch = dist - w.length;
+  if(stretch > 0){
+    const radial = player.vel.dot(dir);
+    const spring = stretch * 19;
+    player.vel.addScaledVector(dir, spring*dt);
+    if(radial < 0) player.vel.addScaledVector(dir, -radial*.022); // ei tapa keinuntaa liikaa
+    if(radial > 0) player.vel.addScaledVector(dir, -radial*.030); // vaimentaa poispäin karkaamista
+  }
+}
+
+/* laiteorientaatio */
+const zee = new THREE.Vector3(0,0,1);
+const eul = new THREE.Euler();
+const q0 = new THREE.Quaternion();
+const qScreen = new THREE.Quaternion();
+const qFix = new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
+const deviceQ = new THREE.Quaternion();
+const calQ = new THREE.Quaternion();
+let haveOrientation=false;
+function screenAngle(){ if(screen.orientation && typeof screen.orientation.angle==='number') return screen.orientation.angle; return window.orientation || 0; }
+window.addEventListener('deviceorientation', e=>{
+  if(e.alpha===null) return; haveOrientation=true;
+  const a=THREE.MathUtils.degToRad(e.alpha||0), b=THREE.MathUtils.degToRad(e.beta||0), g=THREE.MathUtils.degToRad(e.gamma||0), o=THREE.MathUtils.degToRad(screenAngle());
+  eul.set(b,a,-g,'YXZ'); q0.setFromEuler(eul); q0.multiply(qFix); q0.multiply(qScreen.setFromAxisAngle(zee,-o)); deviceQ.copy(q0);
+}, true);
+function recenter(){
+  const f = new THREE.Vector3(0,0,-1).applyQuaternion(deviceQ); f.y=0;
+  if(f.lengthSq()<1e-6) return; f.normalize();
+  const heading = Math.atan2(f.x,-f.z); calQ.setFromAxisAngle(new THREE.Vector3(0,1,0), -heading);
+  showNotice('Näkymä keskitetty');
+}
+let monoYaw=0, monoPitch=0, dragging=false, lx=0, ly=0;
+canvas.addEventListener('pointerdown', e=>{dragging=true; lx=e.clientX; ly=e.clientY;});
+window.addEventListener('pointermove', e=>{ if(!dragging || mode!=='mono') return; monoYaw -= (e.clientX-lx)*.004; monoPitch -= (e.clientY-ly)*.004; monoPitch=Math.max(-1.25,Math.min(1.25,monoPitch)); lx=e.clientX; ly=e.clientY; });
+window.addEventListener('pointerup', ()=>dragging=false);
+
+/* gamepad */
+const padStatusEl = document.getElementById('padStatus');
+let padIndex=-1, prevButtons={};
+window.addEventListener('gamepadconnected', e=>{ padIndex=e.gamepad.index; updatePadStatus(e.gamepad); });
+window.addEventListener('gamepaddisconnected', ()=>{ padIndex=-1; updatePadStatus(null); });
+function getPad(){
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  if(padIndex>=0 && pads[padIndex]) return pads[padIndex];
+  for(const p of pads){ if(p){ padIndex=p.index; return p; } }
+  return null;
+}
+function updatePadStatus(p){
+  if(p){ padStatusEl.textContent='Ohjain yhdistetty ✓ ' + p.id.slice(0,42); padStatusEl.classList.add('ok'); }
+  else { padStatusEl.textContent='Ohjain: paina mitä tahansa nappia herättääksesi…'; padStatusEl.classList.remove('ok'); }
+}
+function pressed(p,i){ const now=!!(p.buttons[i]&&p.buttons[i].pressed); const was=!!prevButtons[i]; prevButtons[i]=now; return now&&!was; }
+const dz = v => Math.abs(v)<.1 ? 0 : (v - Math.sign(v)*.1)/.9;
+
+/* touch fallback */
+const touchState = {l:false,r:false};
+function bindTouch(id,key){ const el=document.getElementById(id); el.addEventListener('pointerdown', e=>{e.preventDefault(); touchState[key]=true; el.setPointerCapture(e.pointerId);}); el.addEventListener('pointerup', e=>{touchState[key]=false;}); el.addEventListener('pointercancel',()=>{touchState[key]=false;}); }
+bindTouch('touchL','l'); bindTouch('touchR','r');
+
+/* fyysinen simulaatio */
+let mode=null, running=false, paused=false, lastT=0, hudAcc=0;
+function resetPlayer(){
+  player.pos.set(0,22,28); player.vel.set(0,0,-10); player.yaw=0; detachWeb(webL); detachWeb(webR); score=0; showNotice('Reset');
+}
+function collideBuildings(){
+  for(const b of buildings){
+    if(player.pos.y > b.h+2 || player.pos.y < 0) continue;
+    const dx = player.pos.x - b.x, dz = player.pos.z - b.z;
+    const px = b.w/2 + 1.2 - Math.abs(dx);
+    const pz = b.d/2 + 1.2 - Math.abs(dz);
+    if(px>0 && pz>0){
+      if(px < pz){ player.pos.x += Math.sign(dx||1)*px; player.vel.x *= -.18; player.vel.y *= .75; }
+      else { player.pos.z += Math.sign(dz||1)*pz; player.vel.z *= -.18; player.vel.y *= .75; }
+      detachWeb(webL); detachWeb(webR); showNotice('Seinäkosketus'); break;
+    }
+  }
+}
+function physics(dt, controls){
+  if(paused) return;
+  // triggers edge detection
+  function handleWeb(w, down){ if(down && !w.triggerWas && !w.active) attachWeb(w); if(!down && w.active) detachWeb(w); w.triggerWas = down; }
+  handleWeb(webL, controls.leftWeb);
+  handleWeb(webR, controls.rightWeb);
+
+  // Painovoima + ilmanvastus
+  player.vel.y -= 18.5 * dt;
+  player.vel.multiplyScalar(Math.pow(.992, dt*60));
+
+  // ilmassa ohjaus katseen suuntaan. Ei pyöritä kameraa, vain lisää vauhtia.
+  const v = getViewVectors();
+  const forwardFlat = v.dir.clone(); forwardFlat.y=0; if(forwardFlat.lengthSq()>.01) forwardFlat.normalize();
+  const rightFlat = v.right.clone(); rightFlat.y=0; if(rightFlat.lengthSq()>.01) rightFlat.normalize();
+  player.vel.addScaledVector(rightFlat, controls.steer * 13 * dt);
+  player.vel.addScaledVector(forwardFlat, -controls.pitch * 8 * dt);
+
+  webPhysics(webL, dt, controls.reel);
+  webPhysics(webR, dt, controls.reel);
+
+  // boost/release tuntuu kuin web zip / swing kick
+  if(controls.reel && (webL.active || webR.active)) score += 3*dt;
+
+  // nopeusrajoitin, ettei pahoinvointi karkaa
+  const maxSpeed = 58;
+  if(player.vel.length() > maxSpeed) player.vel.setLength(maxSpeed);
+
+  player.pos.addScaledVector(player.vel, dt);
+
+  // maa ja kaupungin rajat
+  if(player.pos.y < 1.65){ player.pos.y=1.65; if(player.vel.y<0) player.vel.y=0; player.vel.x*=.86; player.vel.z*=.86; }
+  const limit=560;
+  if(Math.abs(player.pos.x)>limit){ player.pos.x=Math.sign(player.pos.x)*limit; player.vel.x*=-.25; }
+  if(Math.abs(player.pos.z)>limit){ player.pos.z=Math.sign(player.pos.z)*limit; player.vel.z*=-.25; }
+  collideBuildings();
+
+  rig.position.copy(player.pos);
+  sky.position.copy(player.pos);
+  updateWebLine(webL); updateWebLine(webR);
+
+  // score nopeasta ilmassa pysymisestä
+  if(player.pos.y > 5 && player.vel.length()>10) score += dt * player.vel.length() * .45;
+}
+
+function updateAnchorPreview(){
+  bestAnchorL = findAnchor(-1); bestAnchorR = findAnchor(1);
+  const a = webR.active ? webR.anchor : (webL.active ? webL.anchor : (bestAnchorR || bestAnchorL));
+  if(a){ anchorOrb.visible=true; anchorOrb.position.copy(a); anchorOrb.scale.setScalar(1 + .2*Math.sin(performance.now()*0.006)); }
+  else anchorOrb.visible=false;
+}
+
+/* pause menu hyvin kevyt */
+function togglePause(){ paused=!paused; showNotice(paused?'Pause':'Jatka'); }
+
+function resize(){
+  const w=window.innerWidth, h=window.innerHeight;
+  renderer.setSize(w,h,false);
+  camL.aspect=(w/2)/h; camR.aspect=(w/2)/h; camM.aspect=w/h;
+  applyEyeSettings();
+  document.getElementById('rotate').style.display = (mode==='vr' && running && h>w) ? 'flex' : 'none';
+}
+window.addEventListener('resize', resize); window.addEventListener('orientationchange', ()=>setTimeout(resize,250));
+
+function collectControls(){
+  const p = getPad();
+  let leftWeb = touchState.l, rightWeb = touchState.r, reel=false, steer=0, pitch=0;
+  if(p){
+    updatePadStatus(p);
+    leftWeb = leftWeb || ((p.buttons[6] && p.buttons[6].value>.18) || (p.buttons[4] && p.buttons[4].pressed));
+    rightWeb = rightWeb || ((p.buttons[7] && p.buttons[7].value>.18) || (p.buttons[5] && p.buttons[5].pressed));
+    reel = !!(p.buttons[0] && p.buttons[0].pressed);
+    steer = dz(p.axes[0]||0);
+    pitch = dz(p.axes[1]||0);
+    if(pressed(p,3)) recenter();
+    if(pressed(p,1)) resetPlayer();
+    if(pressed(p,9)) togglePause();
+    if(pressed(p,14)) adjustLens(-1);
+    if(pressed(p,15)) adjustLens(1);
+    if(pressed(p,12)) adjustFov(1);
+    if(pressed(p,13)) adjustFov(-1);
+  }
+  return {leftWeb,rightWeb,reel,steer,pitch};
+}
+
+function loop(t){
+  requestAnimationFrame(loop);
+  const dt = Math.min(.045, (t-lastT)/1000 || .016); lastT=t;
+  if(!running) return;
+  const controls = collectControls();
+
+  if(mode==='vr' && haveOrientation) head.quaternion.copy(calQ).multiply(deviceQ);
+  else head.quaternion.setFromEuler(new THREE.Euler(monoPitch, monoYaw, 0, 'YXZ'));
+
+  updateAnchorPreview();
+  physics(dt/2, controls); physics(dt/2, controls);
+
+  hudAcc += dt;
+  if(hudAcc>.05){ hudAcc=0; drawHUD(); if(performance.now()>noticeUntil) toast.visible=false; }
+
+  const w=window.innerWidth, h=window.innerHeight;
+  if(mode==='vr'){
+    renderer.setScissorTest(true);
+    renderer.setViewport(0,0,w/2,h); renderer.setScissor(0,0,w/2,h); renderer.render(scene,camL);
+    renderer.setViewport(w/2,0,w/2,h); renderer.setScissor(w/2,0,w/2,h); renderer.render(scene,camR);
+    renderer.setScissorTest(false);
+  } else {
+    renderer.setViewport(0,0,w,h); renderer.render(scene,camM);
+  }
+}
+requestAnimationFrame(loop);
+
+/* käynnistys */
+let wakeLock=null;
+async function keepAwake(){ try{ if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){} }
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && running) keepAwake(); });
+async function begin(m, calibrationOnly=false){
+  mode=m;
+  if(m==='vr'){
+    try{
+      if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+        const res = await DeviceOrientationEvent.requestPermission(); if(res!=='granted'){ alert('Gyroskooppilupa tarvitaan VR-tilaan.'); return; }
+      }
+    }catch(e){}
+    try{ await document.documentElement.requestFullscreen({navigationUI:'hide'}); }catch(e){}
+  }
+  await keepAwake();
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('divider').style.display = (m==='vr') ? 'block' : 'none';
+  document.getElementById('touch').style.display = (m==='mono') ? 'flex' : 'none';
+  running=true; paused=false; resetPlayer(); resize(); drawHUD();
+  if(calibrationOnly){ player.pos.set(0,60,0); player.vel.set(0,0,0); showNotice('D-pad säätää IPD/FOV'); }
+  setTimeout(recenter,600); setTimeout(recenter,1500);
+}
+document.getElementById('btnVR').addEventListener('click', ()=>begin('vr'));
+document.getElementById('btnMono').addEventListener('click', ()=>begin('mono'));
+document.getElementById('btnCal').addEventListener('click', ()=>begin('vr', true));
+setInterval(()=>{ if(!running){ const p=getPad(); if(p) updatePadStatus(p); } }, 350);
+resize(); drawHUD();
+</script>
+</body>
+</html>
