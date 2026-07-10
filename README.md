@@ -67,7 +67,7 @@
 
 <div id="start" class="overlay">
  <div class="inner">
-  <div class="eyebrow">Safari · Cardboard · Gamepad · v2.0</div>
+  <div class="eyebrow">Safari · Cardboard · Gamepad · v2.1</div>
   <h1>Kaa<em>rre</em></h1>
   <p class="sub">VR-aika-ajo. Valitse rata, aja puhtaasti, jahtaa parasta kierrosta.</p>
   <div id="padStatus" class="pad-status">Ohjain: paina mitä tahansa nappia herättääksesi…</div>
@@ -361,7 +361,10 @@ let menuState = 'none', menuSel = 0;   // 'none' | 'pause' | 'main'
 let pauseT0 = 0;                        // kellon pysäytys valikon ajaksi
 function menuItems(){
   if(menuState === 'pause')
-    return [['Jatka','takaisin ajoon'],['Aloita alusta', gameMode==='highway' ? 'uusi yritys' : 'auto lähtöviivalle'],['Vaihda rataa','valintaan']];
+    return [['Jatka','takaisin ajoon'],
+            ['Aloita alusta', gameMode==='highway' ? 'uusi yritys' : 'auto lähtöviivalle'],
+            ['Ohjausherkkyys','◄  ' + Math.round(steerSens*100) + ' %  ►'],
+            ['Vaihda rataa','valintaan']];
   if(menuState === 'results')
     return [['Aja uudestaan','sama meno'],['Valikkoon','vaihda moodia']];
   return MENU_TRACKS.map(T=>[T.name, T.desc]);
@@ -383,7 +386,7 @@ function drawMenu(){
   }
   const items = menuItems();
   items.forEach(([name, desc], i)=>{
-    const y = y0 + i*(menuState==='main' && items.length>3 ? 100 : 112);
+    const y = y0 + i*(items.length > 3 ? 100 : 112);
     if(i === menuSel){
       g.fillStyle='rgba(255,207,107,0.16)';
       g.beginPath(); g.roundRect ? g.roundRect(70, y-52, 884, 92, 20) : g.rect(70, y-52, 884, 92); g.fill();
@@ -397,7 +400,7 @@ function drawMenu(){
     g.fillText(desc, 560, y+8);
   });
   g.fillStyle='#b9a8d8'; g.font='600 36px -apple-system, sans-serif'; g.textAlign='center';
-  g.fillText('ristiohjain ↑↓ · ✕ valitse' + (menuState==='pause' ? ' · Options jatka' : ''), 512, 590);
+  g.fillText('ristiohjain ↑↓ · ✕ valitse' + (menuState==='pause' ? ' · ◄ ► säädä · Options jatka' : ''), 512, 590);
   menuTex.needsUpdate = true;
 }
 function openMenu(s){
@@ -418,6 +421,10 @@ function menuAction(){
     else if(menuSel === 1){
       if(gameMode === 'highway'){ resetHighwayRun(); closeMenu(); showNotice('Uusi yritys'); }
       else { placeCarAtGrid(); closeMenu(); showNotice('Lähtöviivalle'); }
+    }
+    else if(menuSel === 2){
+      steerSens = steerSens >= 1.3 ? 0.3 : Math.round((steerSens+0.1)*10)/10;
+      drawMenu();
     }
     else openMenu('main');
   } else if(menuState === 'results'){
@@ -1015,6 +1022,7 @@ function buildTrack(idx){
 
 /* ============ ajofysiikka ============ */
 const car = { yaw:0, vx:0, vLat:0, yawRate:0, steer:0, lastIdx:0 };
+let steerSens = 0.7;   // ohjausherkkyys 0.3–1.3, säädettävissä taukovalikosta
 const CFG = {
   mass:1150, wheelbase:2.6, power:6800, brake:11000,
   aero:0.42, roll:16, gripLatK:9, gripLatMax:13, yawFollow:7.5
@@ -1042,7 +1050,7 @@ function stepCar(dt, steerIn, thr, brk, rev){
   const grip = onTrack ? 1.0 : 0.42;
   /* nopeusherkkä ohjaus */
   const maxSteer = 0.52 / (1 + Math.max(0,car.vx)*0.03);
-  car.steer += (steerIn*maxSteer - car.steer) * Math.min(1, 12*dt);
+  car.steer += (steerIn*steerSens*maxSteer - car.steer) * Math.min(1, 12*dt);
 
   /* pituusvoimat: R2 kaasu, L2 jarru (molempiin suuntiin), ○ pakki */
   let F = thr * CFG.power * grip;
@@ -1388,6 +1396,9 @@ function loop(t){
       const n = menuItems().length;
       if(pressed(p,12)){ menuSel = (menuSel-1+n)%n; drawMenu(); }
       if(pressed(p,13)){ menuSel = (menuSel+1)%n; drawMenu(); }
+      const sensRow = (menuState === 'pause' && menuSel === 2);
+      if(pressed(p,14)){ if(sensRow){ steerSens = Math.max(0.3, Math.round((steerSens-0.1)*10)/10); drawMenu(); } }
+      if(pressed(p,15)){ if(sensRow){ steerSens = Math.min(1.3, Math.round((steerSens+0.1)*10)/10); drawMenu(); } }
       if(pressed(p,0)) menuAction();
       if(pressed(p,1) && menuState==='main') openMenu('pause');   // ○ takaisin
     } else {
