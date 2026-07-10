@@ -58,14 +58,14 @@
 
 <div id="start" class="overlay">
   <div class="inner">
-    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.1.0-web-swinger-city</div>
+    <div class="eyebrow">iPhone · Cardboard · Gamepad · v0.2.0-swing-physics-rooftops</div>
     <h1>WEB <em>SWINGER</em> VR</h1>
-    <p class="sub">First person -kaupunkikeinunta passiivisille VR-laseille. Ammu vasen ja oikea seitti eri triggereillä, ota vauhtia korkeista rakennuksista ja lennä katujen yläpuolella.</p>
+    <p class="sub">First person -kaupunkikeinunta passiivisille VR-laseille. Vasen ja oikea triggeri ampuvat valkoiset seitit rakennuksiin. Laskeudu katoille, juokse tateilla, hyppää alas ja rakenna korkea, luonnollinen swing-kaari.</p>
     <div id="padStatus" class="pad-status">Ohjain: paina mitä tahansa nappia herättääksesi…</div>
     <div class="cardrow">
-      <div class="card"><b>Vasen/oikea seitti</b><span>L2 ja R2 tarttuvat lähimpään sopivaan rakennuksen sivuun.</span></div>
+      <div class="card"><b>Vasen/oikea seitti</b><span>L2 ja R2 tarttuvat korkeisiin rakennuksiin. X/A pumppaa vauhtia tai hyppää katolta.</span></div>
       <div class="card"><b>VR-kalibrointi</b><span>D-pad vasen/oikea säätää IPD:tä, ylös/alas FOVia.</span></div>
-      <div class="card"><b>Mukavuus</b><span>Ei automaattista kameran pyöritystä. Pää ohjaa katsesuuntaa.</span></div>
+      <div class="card"><b>Katot & kävely</b><span>Rakennusten katoille voi laskeutua, kävellä ja hypätä takaisin ilmaan.</span></div>
     </div>
     <div class="btns">
       <button id="btnVR">Pelaa VR:ssä</button>
@@ -73,7 +73,7 @@
       <button id="btnCal" class="red">Kalibrointitesti</button>
     </div>
     <p class="hint">
-      <b>R2</b> oikea seitti · <b>L2</b> vasen seitti · <b>X/A</b> vedä/boostaa seittiin · <b>vasen tatti</b> ilmassa ohjaus<br>
+      <b>R2</b> oikea seitti · <b>L2</b> vasen seitti · <b>X/A</b> hyppy / swing-boost · <b>vasen tatti</b> kävely ja ilmakorjaus<br>
       <b>△/Y</b> keskitä näkymä · <b>○/B</b> resetoi kadulle · <b>Options</b> pause · <b>D-pad</b> IPD/FOV<br>
       2D-testissä voit katsoa ympärille vetämällä ruutua. Touch-painikkeet näkyvät vain ilman ohjainta.
     </p>
@@ -85,7 +85,7 @@
 'use strict';
 
 /* näkyvä virheruutu */
-const VERSION = '0.1.0-web-swinger-city';
+const VERSION = '0.2.0-swing-physics-rooftops';
 const errorBox = document.getElementById('errorBox');
 window.addEventListener('error', function(e){
   const msg = 'Web Swinger VR kaatui:\n\n' + (e.message || 'tuntematon virhe') + '\n\nVersion: ' + VERSION;
@@ -149,8 +149,13 @@ function makeWindowTexture(base, lit){
 const roadMat = new THREE.MeshLambertMaterial({color:0x161c2a});
 const sidewalkMat = new THREE.MeshLambertMaterial({color:0x1e2538});
 const laneMat = new THREE.MeshBasicMaterial({color:0xbcd7ff});
-const webMatL = new THREE.LineBasicMaterial({color:0x69e8ff, transparent:true, opacity:0.92});
-const webMatR = new THREE.LineBasicMaterial({color:0xff5f7c, transparent:true, opacity:0.92});
+const webMats = [
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.92, depthWrite:false}),
+  new THREE.LineBasicMaterial({color:0xeaf7ff, transparent:true, opacity:0.62, depthWrite:false}),
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.48, depthWrite:false}),
+  new THREE.LineBasicMaterial({color:0xdbefff, transparent:true, opacity:0.38, depthWrite:false}),
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.30, depthWrite:false})
+];
 const anchorMat = new THREE.MeshBasicMaterial({color:0xffd271, transparent:true, opacity:.75, depthWrite:false});
 
 /* pelaajan VR-rigi */
@@ -186,14 +191,16 @@ function drawHUD(){
   g.fillStyle='rgba(3,10,22,.50)'; roundedRect(g,40,24,944,255,28); g.fill();
   g.font='900 50px -apple-system, sans-serif'; g.textBaseline='middle';
   const kmh = Math.round(player.vel.length()*3.6);
-  g.fillStyle='#f4f8ff'; g.textAlign='left'; g.fillText(kmh + ' km/h',70,82);
+  const state = player.grounded ? (player.surface ? 'KATTO' : 'MAA') : ((webL.active||webR.active) ? 'SWING' : 'ILMA');
+  g.fillStyle='#f4f8ff'; g.textAlign='left'; g.fillText(kmh + ' km/h',70,76);
   g.font='800 34px -apple-system, sans-serif'; g.fillStyle='#a9b8d9';
-  g.fillText('Korkeus ' + Math.round(player.pos.y) + ' m',70,142);
-  g.fillText('Score ' + Math.floor(score),70,198);
+  g.fillText('Korkeus ' + Math.round(player.pos.y-PLAYER_EYE) + ' m',70,134);
+  g.fillText('Tila ' + state,70,188);
+  g.fillText('Score ' + Math.floor(score),70,240);
   g.textAlign='right';
-  g.fillStyle = webL.active ? '#69e8ff' : '#5e6b80'; g.fillText('L2 ' + (webL.active?'KIINNI':'vapaa'),954,82);
-  g.fillStyle = webR.active ? '#ff5f7c' : '#5e6b80'; g.fillText('R2 ' + (webR.active?'KIINNI':'vapaa'),954,132);
-  g.fillStyle='#ffd271'; g.fillText('IPD ' + lensShiftPx + ' · FOV ' + eyeFov,954,196);
+  g.fillStyle = webL.active ? '#ffffff' : '#5e6b80'; g.fillText('L2 ' + (webL.active?'KIINNI':'vapaa'),954,78);
+  g.fillStyle = webR.active ? '#ffffff' : '#5e6b80'; g.fillText('R2 ' + (webR.active?'KIINNI':'vapaa'),954,128);
+  g.fillStyle='#ffd271'; g.fillText('IPD ' + lensShiftPx + ' · FOV ' + eyeFov,954,190);
   g.fillStyle='rgba(244,248,255,.55)'; g.font='700 24px -apple-system, sans-serif';
   g.fillText('v' + VERSION,954,244);
   hudTex.needsUpdate = true;
@@ -292,18 +299,34 @@ createCity();
 const anchorOrb = new THREE.Mesh(new THREE.SphereGeometry(.7,16,8), anchorMat); anchorOrb.visible=false; scene.add(anchorOrb);
 
 /* pelaaja ja seitit */
+const PLAYER_EYE = 1.65;
+const PLAYER_RADIUS = 0.85;
 const player = {
   pos: new THREE.Vector3(0,16,18),
   vel: new THREE.Vector3(0,0,-8),
   yaw: 0,
-  grounded:false
+  grounded:false,
+  surface:null
 };
 rig.position.copy(player.pos);
 
+const WEB_SEGMENTS = 13;
 function makeWeb(side){
-  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-  const line = new THREE.Line(geo, side<0?webMatL:webMatR); line.visible=false; scene.add(line);
-  return {side, active:false, anchor:new THREE.Vector3(), length:0, line, triggerWas:false, lastAttach:0};
+  const strands = [];
+  for(let j=0;j<5;j++){
+    const arr = new Float32Array(WEB_SEGMENTS * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const line = new THREE.Line(geo, webMats[j % webMats.length]);
+    line.visible = false;
+    line.frustumCulled = false;
+    line.renderOrder = 8;
+    scene.add(line);
+    strands.push(line);
+  }
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(.34, 12, 8), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.72, depthWrite:false}));
+  tip.visible=false; tip.renderOrder=9; scene.add(tip);
+  return {side, active:false, anchor:new THREE.Vector3(), length:0, targetLength:0, strands, tip, triggerWas:false, lastAttach:0};
 }
 const webL = makeWeb(-1);
 const webR = makeWeb(1);
@@ -314,6 +337,8 @@ const _dir = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _up = new THREE.Vector3(0,1,0);
 const _tmp = new THREE.Vector3();
+const _tmp2 = new THREE.Vector3();
+const _tmp3 = new THREE.Vector3();
 function getViewVectors(){
   const q = new THREE.Quaternion(); head.getWorldQuaternion(q);
   _dir.set(0,0,-1).applyQuaternion(q).normalize();
@@ -324,19 +349,25 @@ function getViewVectors(){
 function findAnchor(side){
   const v = getViewVectors();
   const p = player.pos;
+  const aim = v.dir.clone().multiplyScalar(.78).addScaledVector(v.right, side*.54).addScaledVector(_up, .22).normalize();
   let best = null, bestScore = Infinity;
   for(const a of anchors){
     _tmp.copy(a).sub(p);
     const dist = _tmp.length();
-    if(dist < 12 || dist > 145) continue;
+    if(dist < 10 || dist > 225) continue;
     const n = _tmp.clone().normalize();
     const ahead = n.dot(v.dir);
-    if(ahead < 0.05) continue;
     const sideDot = n.dot(v.right) * side;
-    // L2 suosii vasenta ja R2 oikeaa, mutta sallii myös etuviistot tartunnat.
-    if(sideDot < -0.38) continue;
-    const heightBonus = Math.max(0, a.y - p.y) * .15;
-    const s = dist - ahead*55 - Math.max(0,sideDot)*35 - heightBonus;
+    const align = n.dot(aim);
+    if(align < -0.08) continue;
+    if(sideDot < -0.46) continue;
+    const heightAbove = a.y - p.y;
+    const highBonus = Math.max(-14, Math.min(95, heightAbove)) * .58;
+    const goodSide = Math.max(0, sideDot) * 42;
+    const aheadBonus = Math.max(0, ahead) * 38;
+    const distPenalty = Math.abs(dist - 92) * .32;
+    const lowPenalty = heightAbove < -18 ? 45 : 0;
+    const s = dist + distPenalty - align*92 - goodSide - aheadBonus - highBonus + lowPenalty;
     if(s < bestScore){ bestScore = s; best = a; }
   }
   return best;
@@ -345,42 +376,105 @@ function attachWeb(w){
   const a = findAnchor(w.side);
   if(!a){ showNotice(w.side<0?'Vasen: ei pintaa':'Oikea: ei pintaa'); return; }
   w.active=true; w.anchor.copy(a);
-  w.length = Math.max(8, player.pos.distanceTo(w.anchor) * .92);
-  w.line.visible=true; w.lastAttach=performance.now();
+  const dist = player.pos.distanceTo(w.anchor);
+  w.length = Math.max(16, dist * .98);
+  w.targetLength = Math.max(13, dist * .68);
+  for(const l of w.strands) l.visible=true;
+  w.tip.visible=true; w.lastAttach=performance.now();
+
+  // Pehmeä lähtöimpulssi: ei vedä lasermaisesti suoraan pisteeseen, mutta antaa heti swing-kaaren.
+  const to = _tmp.copy(w.anchor).sub(player.pos).normalize();
+  const v = getViewVectors();
+  const forwardFlat = v.dir.clone(); forwardFlat.y = 0; if(forwardFlat.lengthSq()>.01) forwardFlat.normalize();
+  player.vel.addScaledVector(to, 3.2);
+  player.vel.addScaledVector(forwardFlat, 2.6);
+  if(player.vel.y < 2.5) player.vel.y += 2.8;
+  player.grounded=false; player.surface=null;
   showNotice(w.side<0?'Vasen seitti':'Oikea seitti');
 }
-function detachWeb(w){ w.active=false; w.line.visible=false; }
+function detachWeb(w){
+  w.active=false;
+  for(const l of w.strands) l.visible=false;
+  w.tip.visible=false;
+}
 function updateWebLine(w){
   if(!w.active) return;
-  const start = player.pos.clone();
-  const sideOffset = getViewVectors().right.clone().multiplyScalar(w.side*.36);
-  start.add(sideOffset).add(new THREE.Vector3(0,-.25,0));
-  const arr = w.line.geometry.attributes.position.array;
-  arr[0]=start.x; arr[1]=start.y; arr[2]=start.z;
-  arr[3]=w.anchor.x; arr[4]=w.anchor.y; arr[5]=w.anchor.z;
-  w.line.geometry.attributes.position.needsUpdate=true;
+  const tNow = performance.now() * 0.004;
+  const v = getViewVectors();
+  const start = player.pos.clone().addScaledVector(v.right, w.side*.38).add(new THREE.Vector3(0,-.28,0));
+  const end = w.anchor;
+  const chord = end.clone().sub(start);
+  const len = chord.length();
+  const dir = chord.clone().normalize();
+  const sideVec = new THREE.Vector3().crossVectors(dir, _up);
+  if(sideVec.lengthSq()<.001) sideVec.copy(v.right); else sideVec.normalize();
+  const sag = Math.min(3.2, len * .018);
+  const baseControl = start.clone().lerp(end, .52).addScaledVector(_up, -sag);
+  for(let j=0;j<w.strands.length;j++){
+    const line = w.strands[j];
+    const arr = line.geometry.attributes.position.array;
+    const phase = tNow + j*1.7 + w.side*.6;
+    const strandOffset = (j-2) * .035;
+    const control = baseControl.clone()
+      .addScaledVector(sideVec, Math.sin(phase)*.18 + strandOffset)
+      .addScaledVector(_up, Math.cos(phase*.7)*.08);
+    for(let i=0;i<WEB_SEGMENTS;i++){
+      const u = i/(WEB_SEGMENTS-1);
+      // Quadratic bezier + pieni orgaaninen aalto, jotta seitti ei näytä kepiltä.
+      const a = (1-u)*(1-u), b = 2*(1-u)*u, c = u*u;
+      const wave = Math.sin(u*Math.PI*5 + phase) * .035 * Math.sin(u*Math.PI);
+      _tmp2.set(0,0,0).addScaledVector(start,a).addScaledVector(control,b).addScaledVector(end,c).addScaledVector(sideVec,wave);
+      arr[i*3] = _tmp2.x; arr[i*3+1] = _tmp2.y; arr[i*3+2] = _tmp2.z;
+    }
+    line.geometry.attributes.position.needsUpdate=true;
+  }
+  w.tip.position.copy(end);
+  const pulse = 1 + Math.sin(tNow*2 + w.side)*.16;
+  w.tip.scale.setScalar(pulse);
 }
-function webPhysics(w,dt,reel){
+function webPhysics(w,dt,actionHeld){
   if(!w.active) return;
   const to = _tmp.copy(w.anchor).sub(player.pos);
   const dist = to.length(); if(dist<.001) return;
   const dir = to.multiplyScalar(1/dist);
-  if(reel){
-    w.length = Math.max(7, w.length - 28*dt);
-    player.vel.addScaledVector(dir, 18*dt);
-  } else {
-    // automaattinen pieni kiristys tekee pelistä mobiilissa hauskemman
-    w.length = Math.max(9, w.length - 4*dt);
+  const heightDiff = w.anchor.y - player.pos.y;
+
+  // Auttaa muodostamaan ison swing-kaaren: köysi lyhenee hitaasti itsestään ja X/A pumppaa aktiivisemmin.
+  const reelRate = actionHeld ? 34 : 7.5;
+  w.length = Math.max(w.targetLength, w.length - reelRate*dt);
+  if(actionHeld){
+    player.vel.addScaledVector(dir, 20*dt);
+    player.vel.y += Math.max(0, Math.min(5.5, heightDiff*.035)) * dt;
   }
+
   const stretch = dist - w.length;
   if(stretch > 0){
-    const radial = player.vel.dot(dir);
-    const spring = stretch * 19;
+    const radial = player.vel.dot(dir); // positiivinen = kohti ankkuria, negatiivinen = köydestä poispäin
+    const spring = stretch * 32;
     player.vel.addScaledVector(dir, spring*dt);
-    if(radial < 0) player.vel.addScaledVector(dir, -radial*.022); // ei tapa keinuntaa liikaa
-    if(radial > 0) player.vel.addScaledVector(dir, -radial*.030); // vaimentaa poispäin karkaamista
+    if(radial < 0) player.vel.addScaledVector(dir, -radial*.72); // köysi tappaa ulospäin karkaamisen
+    else player.vel.addScaledVector(dir, -radial*.045);          // pieni vaimennus kohti ankkuria
+
+    // Tangentiaalinen swing-assist: säilyttää vauhdin kaaressa eikä muuta liikettä hissiksi.
+    const tangent = _tmp2.copy(player.vel).addScaledVector(dir, -player.vel.dot(dir));
+    if(tangent.lengthSq() > .04){
+      tangent.normalize();
+      player.vel.addScaledVector(tangent, (actionHeld ? 11 : 4.2) * dt);
+    }
+    // Jos ankkuri on ylhäällä, bottom-out antaa vähän nostetta kuten hyvässä supersankariswingissä.
+    if(heightDiff > 2 && player.vel.y < 10) player.vel.y += Math.min(7.5, heightDiff*.075) * dt;
   }
 }
+function enforceWebConstraint(w){
+  if(!w.active) return;
+  const away = _tmp.copy(player.pos).sub(w.anchor);
+  const dist = away.length(); if(dist <= w.length || dist < .001) return;
+  const dir = away.multiplyScalar(1/dist);
+  player.pos.copy(w.anchor).addScaledVector(dir, w.length);
+  const radial = player.vel.dot(dir);
+  if(radial > 0) player.vel.addScaledVector(dir, -radial*.94);
+}
+
 
 /* laiteorientaatio */
 const zee = new THREE.Vector3(0,0,1);
@@ -434,64 +528,139 @@ bindTouch('touchL','l'); bindTouch('touchR','r');
 /* fyysinen simulaatio */
 let mode=null, running=false, paused=false, lastT=0, hudAcc=0;
 function resetPlayer(){
-  player.pos.set(0,22,28); player.vel.set(0,0,-10); player.yaw=0; detachWeb(webL); detachWeb(webR); score=0; showNotice('Reset');
+  player.pos.set(0,28,34); player.vel.set(0,0,-12); player.yaw=0; player.grounded=false; player.surface=null;
+  detachWeb(webL); detachWeb(webR); score=0; showNotice('Reset');
 }
-function collideBuildings(){
+function roofUnder(x,z, margin=-.15){
+  let best = null;
   for(const b of buildings){
-    if(player.pos.y > b.h+2 || player.pos.y < 0) continue;
+    if(x > b.x-b.w/2+margin && x < b.x+b.w/2-margin && z > b.z-b.d/2+margin && z < b.z+b.d/2-margin){
+      if(!best || b.h > best.h) best = b;
+    }
+  }
+  return best;
+}
+function resolveWorldCollisions(prevY){
+  const prevFoot = prevY - PLAYER_EYE;
+  const footY = player.pos.y - PLAYER_EYE;
+  let landed = false;
+  let roof = roofUnder(player.pos.x, player.pos.z, .25);
+
+  // Katolle laskeutuminen: onnistuu vain, jos tullaan ylhäältä tai oltiin jo samalla katolla.
+  if(roof && (prevFoot >= roof.h - .65 || player.surface === roof) && footY <= roof.h && player.vel.y <= 4.5){
+    player.pos.y = roof.h + PLAYER_EYE;
+    player.vel.y = 0;
+    player.grounded = true;
+    player.surface = roof;
+    landed = true;
+  }
+  // Maa
+  if(!landed && footY <= 0){
+    player.pos.y = PLAYER_EYE;
+    if(player.vel.y < 0) player.vel.y = 0;
+    player.grounded = true;
+    player.surface = null;
+    landed = true;
+  }
+  if(!landed){
+    player.grounded = false;
+    if(player.surface && !roof) player.surface = null;
+  }
+
+  // Sivuseinät. Jos ei olla katolla, rakennuksen sisään ei saa upota.
+  const bodyFoot = player.pos.y - PLAYER_EYE;
+  for(const b of buildings){
+    if(bodyFoot >= b.h - .15) continue; // katolla tai sen yläpuolella ei työnnetä sivulle
+    if(player.pos.y < .6) continue;
     const dx = player.pos.x - b.x, dz = player.pos.z - b.z;
-    const px = b.w/2 + 1.2 - Math.abs(dx);
-    const pz = b.d/2 + 1.2 - Math.abs(dz);
+    const px = b.w/2 + PLAYER_RADIUS - Math.abs(dx);
+    const pz = b.d/2 + PLAYER_RADIUS - Math.abs(dz);
     if(px>0 && pz>0){
-      if(px < pz){ player.pos.x += Math.sign(dx||1)*px; player.vel.x *= -.18; player.vel.y *= .75; }
-      else { player.pos.z += Math.sign(dz||1)*pz; player.vel.z *= -.18; player.vel.y *= .75; }
-      detachWeb(webL); detachWeb(webR); showNotice('Seinäkosketus'); break;
+      if(px < pz){
+        const sx = Math.sign(dx || 1);
+        player.pos.x += sx * px;
+        if(Math.sign(player.vel.x) !== sx) player.vel.x *= -.12;
+        else player.vel.x *= .18;
+      } else {
+        const sz = Math.sign(dz || 1);
+        player.pos.z += sz * pz;
+        if(Math.sign(player.vel.z) !== sz) player.vel.z *= -.12;
+        else player.vel.z *= .18;
+      }
+      player.vel.y *= .78;
+      detachWeb(webL); detachWeb(webR);
+      showNotice('Seinäkosketus');
+      break;
     }
   }
 }
 function physics(dt, controls){
   if(paused) return;
-  // triggers edge detection
   function handleWeb(w, down){ if(down && !w.triggerWas && !w.active) attachWeb(w); if(!down && w.active) detachWeb(w); w.triggerWas = down; }
   handleWeb(webL, controls.leftWeb);
   handleWeb(webR, controls.rightWeb);
 
-  // Painovoima + ilmanvastus
-  player.vel.y -= 18.5 * dt;
-  player.vel.multiplyScalar(Math.pow(.992, dt*60));
-
-  // ilmassa ohjaus katseen suuntaan. Ei pyöritä kameraa, vain lisää vauhtia.
   const v = getViewVectors();
-  const forwardFlat = v.dir.clone(); forwardFlat.y=0; if(forwardFlat.lengthSq()>.01) forwardFlat.normalize();
-  const rightFlat = v.right.clone(); rightFlat.y=0; if(rightFlat.lengthSq()>.01) rightFlat.normalize();
-  player.vel.addScaledVector(rightFlat, controls.steer * 13 * dt);
-  player.vel.addScaledVector(forwardFlat, -controls.pitch * 8 * dt);
+  const forwardFlat = v.dir.clone(); forwardFlat.y=0; if(forwardFlat.lengthSq()>.01) forwardFlat.normalize(); else forwardFlat.set(0,0,-1);
+  const rightFlat = v.right.clone(); rightFlat.y=0; if(rightFlat.lengthSq()>.01) rightFlat.normalize(); else rightFlat.set(1,0,0);
+  const move = new THREE.Vector3().addScaledVector(rightFlat, controls.steer).addScaledVector(forwardFlat, -controls.pitch);
+  if(move.lengthSq()>1) move.normalize();
 
-  webPhysics(webL, dt, controls.reel);
-  webPhysics(webR, dt, controls.reel);
+  if(player.grounded){
+    // Katto-/maakävely: tatilla liikutaan kuin action-pelissä. Katolta voi juosta reunalta alas.
+    const accel = player.surface ? 46 : 34;
+    const maxWalk = player.surface ? 9.5 : 7.5;
+    player.vel.x += move.x * accel * dt;
+    player.vel.z += move.z * accel * dt;
+    const flatSpeed = Math.hypot(player.vel.x, player.vel.z);
+    if(flatSpeed > maxWalk){
+      const k = maxWalk / flatSpeed; player.vel.x *= k; player.vel.z *= k;
+    }
+    if(move.lengthSq()<.02){
+      const fr = Math.pow(.72, dt*60); player.vel.x *= fr; player.vel.z *= fr;
+    }
+    player.vel.y = 0;
+    if(controls.actionPressed){
+      player.grounded=false; player.surface=null;
+      player.vel.y = 11.8;
+      player.vel.addScaledVector(forwardFlat, 6.5);
+      showNotice('Hyppy');
+    }
+  } else {
+    // Ilmassa ohjaus: pieni korjaus katseen suuntaan, muttei helikopterimaista kääntymistä.
+    player.vel.y -= 17.8 * dt;
+    player.vel.addScaledVector(rightFlat, controls.steer * 12.5 * dt);
+    player.vel.addScaledVector(forwardFlat, -controls.pitch * 7.5 * dt);
+  }
 
-  // boost/release tuntuu kuin web zip / swing kick
-  if(controls.reel && (webL.active || webR.active)) score += 3*dt;
+  if(webL.active || webR.active){
+    player.grounded=false; player.surface=null;
+    webPhysics(webL, dt, controls.actionHeld);
+    webPhysics(webR, dt, controls.actionHeld);
+    if(controls.actionHeld) score += 4*dt;
+  }
 
-  // nopeusrajoitin, ettei pahoinvointi karkaa
-  const maxSpeed = 58;
+  // Vastus: maassa reippaampi, ilmassa kevyt. Tämä pitää VR-mukavuuden kurissa mutta säilyttää swing-vauhdin.
+  const drag = player.grounded ? Math.pow(.985, dt*60) : Math.pow(.996, dt*60);
+  player.vel.multiplyScalar(drag);
+  const maxSpeed = (webL.active || webR.active) ? 78 : 62;
   if(player.vel.length() > maxSpeed) player.vel.setLength(maxSpeed);
 
+  const prevY = player.pos.y;
   player.pos.addScaledVector(player.vel, dt);
+  enforceWebConstraint(webL);
+  enforceWebConstraint(webR);
+  resolveWorldCollisions(prevY);
 
-  // maa ja kaupungin rajat
-  if(player.pos.y < 1.65){ player.pos.y=1.65; if(player.vel.y<0) player.vel.y=0; player.vel.x*=.86; player.vel.z*=.86; }
-  const limit=560;
+  const limit=565;
   if(Math.abs(player.pos.x)>limit){ player.pos.x=Math.sign(player.pos.x)*limit; player.vel.x*=-.25; }
   if(Math.abs(player.pos.z)>limit){ player.pos.z=Math.sign(player.pos.z)*limit; player.vel.z*=-.25; }
-  collideBuildings();
 
   rig.position.copy(player.pos);
   sky.position.copy(player.pos);
   updateWebLine(webL); updateWebLine(webR);
 
-  // score nopeasta ilmassa pysymisestä
-  if(player.pos.y > 5 && player.vel.length()>10) score += dt * player.vel.length() * .45;
+  if(!player.grounded && player.pos.y > 6 && player.vel.length()>9) score += dt * player.vel.length() * .55;
 }
 
 function updateAnchorPreview(){
@@ -515,12 +684,13 @@ window.addEventListener('resize', resize); window.addEventListener('orientationc
 
 function collectControls(){
   const p = getPad();
-  let leftWeb = touchState.l, rightWeb = touchState.r, reel=false, steer=0, pitch=0;
+  let leftWeb = touchState.l, rightWeb = touchState.r, actionHeld=false, actionPressed=false, steer=0, pitch=0;
   if(p){
     updatePadStatus(p);
     leftWeb = leftWeb || ((p.buttons[6] && p.buttons[6].value>.18) || (p.buttons[4] && p.buttons[4].pressed));
     rightWeb = rightWeb || ((p.buttons[7] && p.buttons[7].value>.18) || (p.buttons[5] && p.buttons[5].pressed));
-    reel = !!(p.buttons[0] && p.buttons[0].pressed);
+    actionHeld = !!(p.buttons[0] && p.buttons[0].pressed);
+    actionPressed = pressed(p,0);
     steer = dz(p.axes[0]||0);
     pitch = dz(p.axes[1]||0);
     if(pressed(p,3)) recenter();
@@ -531,7 +701,7 @@ function collectControls(){
     if(pressed(p,12)) adjustFov(1);
     if(pressed(p,13)) adjustFov(-1);
   }
-  return {leftWeb,rightWeb,reel,steer,pitch};
+  return {leftWeb,rightWeb,actionHeld,actionPressed,steer,pitch};
 }
 
 function loop(t){
