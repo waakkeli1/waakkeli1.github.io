@@ -247,7 +247,7 @@
           </div>
           <div class="status-card">
             <strong>Kalibrointi</strong>
-            <div id="calibrationStatus">IPD 64 mm, FOV 78°</div>
+            <div id="calibrationStatus">Linssi -80 px, FOV 78°</div>
           </div>
         </div>
       </section>
@@ -303,10 +303,11 @@ if (!THREE) {
   }
   throw threeLoadError || new Error("Three.js ei latautunut");
 }
-const VERSION = "0.9.4-single";
-const STORAGE_KEY = "viper-deck-vr-settings-v1";
+const VERSION = "0.9.5-targets";
+const STORAGE_KEY = "viper-deck-vr-settings-v2";
 const SHINECON_G05A = Object.freeze({
   ipdMeters: 0.064,
+  lensShiftPx: -80,
   fovDeg: 78,
 });
 
@@ -352,8 +353,9 @@ const state = {
   timeScale: 1,
   width: 1,
   height: 1,
-  fovDeg: savedSettings.fovDeg || SHINECON_G05A.fovDeg,
-  ipdMeters: savedSettings.ipdMeters || SHINECON_G05A.ipdMeters,
+  fovDeg: Number.isFinite(savedSettings.fovDeg) ? savedSettings.fovDeg : SHINECON_G05A.fovDeg,
+  ipdMeters: SHINECON_G05A.ipdMeters,
+  lensShiftPx: Number.isFinite(savedSettings.lensShiftPx) ? savedSettings.lensShiftPx : SHINECON_G05A.lensShiftPx,
   comfortAssist: savedSettings.comfortAssist ?? true,
   throttle: 0.58,
   pitchRate: 0,
@@ -550,9 +552,7 @@ function resetFlight() {
   state.targetStreak = 0;
   state.fireCooldown = 0;
   targets.forEach((target, index) => {
-    target.group.position.set((Math.random() - 0.5) * 620, 170 + Math.random() * 360, -350 - index * 260);
-    target.alive = true;
-    target.group.visible = true;
+    recycleTarget(target, index);
   });
 }
 
@@ -579,6 +579,7 @@ function saveSettings() {
     STORAGE_KEY,
     JSON.stringify({
       ipdMeters: state.ipdMeters,
+      lensShiftPx: state.lensShiftPx,
       fovDeg: state.fovDeg,
       comfortAssist: state.comfortAssist,
     }),
@@ -586,8 +587,8 @@ function saveSettings() {
 }
 
 function updateCalibrationText() {
-  const text = `IPD ${fmt(state.ipdMeters * 1000)} mm, FOV ${fmt(state.fovDeg)}°`;
-  calibrationStatus.textContent = `${text}. D-pad vasen/oikea säätää IPD:tä, ylös/alas FOVia.`;
+  const text = `Linssi ${fmt(state.lensShiftPx)} px, FOV ${fmt(state.fovDeg)}°`;
+  calibrationStatus.textContent = `${text}. D-pad vasen/oikea säätää linssiväliä, ylös/alas FOVia.`;
 }
 
 function onKeyDown(event) {
@@ -604,8 +605,8 @@ function onKeyDown(event) {
     updateModeLabel();
     resizeCanvas();
   }
-  if (event.code === "BracketLeft") adjustIpd(-0.001);
-  if (event.code === "BracketRight") adjustIpd(0.001);
+  if (event.code === "BracketLeft") adjustLensShift(-4);
+  if (event.code === "BracketRight") adjustLensShift(4);
   if (event.code === "Minus") adjustFov(-1);
   if (event.code === "Equal") adjustFov(1);
 }
@@ -654,13 +655,14 @@ function setView(index) {
 
 function resetShineconCalibration() {
   state.ipdMeters = SHINECON_G05A.ipdMeters;
+  state.lensShiftPx = SHINECON_G05A.lensShiftPx;
   state.fovDeg = SHINECON_G05A.fovDeg;
   updateCalibrationText();
   saveSettings();
 }
 
-function adjustIpd(delta) {
-  state.ipdMeters = clamp(state.ipdMeters + delta, 0.052, 0.074);
+function adjustLensShift(delta) {
+  state.lensShiftPx = clamp(state.lensShiftPx + delta, -140, 140);
   updateCalibrationText();
   saveSettings();
 }
@@ -758,7 +760,7 @@ function pollGamepad(dt) {
   const ipdDir = (input.buttons.get("D-right")?.pressed ? 1 : 0) - (input.buttons.get("D-left")?.pressed ? 1 : 0);
   const fovDir = (input.buttons.get("D-up")?.pressed ? 1 : 0) - (input.buttons.get("D-down")?.pressed ? 1 : 0);
   if (ipdDir) {
-    state.ipdMeters = clamp(state.ipdMeters + ipdDir * 0.006 * dt, 0.052, 0.074);
+    state.lensShiftPx = clamp(state.lensShiftPx + ipdDir * 120 * dt, -140, 140);
     updateCalibrationText();
   }
   if (fovDir) {
@@ -944,6 +946,7 @@ function render() {
 
   if (!state.stereo) {
     camera.aspect = w / h;
+    camera.clearViewOffset();
     camera.position.copy(state.baseCameraPosition);
     camera.quaternion.copy(state.baseCameraQuaternion);
     camera.updateProjectionMatrix();
@@ -964,11 +967,14 @@ function render() {
     tempVector.set(sign * state.ipdMeters * 0.5, 0, 0).applyQuaternion(state.baseCameraQuaternion);
     camera.position.copy(state.baseCameraPosition).add(tempVector);
     camera.quaternion.copy(state.baseCameraQuaternion);
+    camera.setViewOffset(half, h, eye === 0 ? state.lensShiftPx : -state.lensShiftPx, 0, half, h);
+    camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
     renderer.setViewport(x, 0, half, h);
     renderer.setScissor(x, 0, half, h);
     renderer.render(scene, camera);
   }
+  camera.clearViewOffset();
   renderer.setScissorTest(false);
 }
 
@@ -1032,18 +1038,23 @@ function fireGun() {
 }
 
 function spawnTargets() {
-  for (let i = 0; i < 9; i += 1) {
-    const target = createTarget();
-    target.group.position.set((Math.random() - 0.5) * 620, 170 + Math.random() * 360, -350 - i * 260);
+  for (let i = 0; i < 12; i += 1) {
+    const target = createTarget(i);
     targets.push(target);
     scene.add(target.group);
+    recycleTarget(target, i);
   }
 }
 
 function updateTargets(dt) {
   for (const target of targets) {
-    target.group.rotation.y += dt * 1.1;
-    target.group.rotation.z += dt * 0.45;
+    target.group.lookAt(flight.position);
+    const pulse = 1 + Math.sin(state.elapsed * 5 + target.seed) * 0.055;
+    target.group.scale.setScalar(pulse);
+    target.outer.rotation.z += dt * 0.75;
+    target.inner.rotation.z -= dt * 1.45;
+    target.core.rotation.y += dt * 2.2;
+    target.glow.material.opacity = 0.42 + Math.sin(state.elapsed * 7 + target.seed) * 0.12;
     const distanceAhead = target.group.position.clone().sub(flight.position).dot(LOCAL_FORWARD.clone().applyQuaternion(flight.quaternion));
     if (!target.alive || distanceAhead < -160 || target.group.position.distanceTo(flight.position) > 2200) {
       recycleTarget(target);
@@ -1051,16 +1062,18 @@ function updateTargets(dt) {
   }
 }
 
-function recycleTarget(target) {
+function recycleTarget(target, slot = Math.floor(Math.random() * 8)) {
   const forward = LOCAL_FORWARD.clone().applyQuaternion(flight.quaternion);
   const right = LOCAL_RIGHT.clone().applyQuaternion(flight.quaternion);
   const up = LOCAL_UP.clone().applyQuaternion(flight.quaternion);
-  const ahead = 780 + Math.random() * 900;
+  const ahead = 480 + slot * 155 + Math.random() * 90;
+  const lateral = Math.sin(slot * 1.7 + state.elapsed * 0.2) * 115 + (Math.random() - 0.5) * 85;
+  const vertical = 35 + Math.sin(slot * 1.25) * 80 + Math.random() * 150;
   target.group.position
     .copy(flight.position)
     .addScaledVector(forward, ahead)
-    .addScaledVector(right, (Math.random() - 0.5) * 680)
-    .addScaledVector(up, 40 + Math.random() * 320);
+    .addScaledVector(right, lateral)
+    .addScaledVector(up, vertical);
   target.alive = true;
   target.group.visible = true;
 }
@@ -1477,22 +1490,70 @@ function makeFinGeometry() {
   return geometry;
 }
 
-function createTarget() {
+function createTarget(index = 0) {
   const group = new THREE.Group();
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(3.4, 0.12, 8, 32),
-    new THREE.MeshBasicMaterial({ color: 0xff5b6e, transparent: true, opacity: 0.9 }),
+  const outer = new THREE.Mesh(
+    new THREE.TorusGeometry(12.5, 0.48, 12, 72),
+    new THREE.MeshBasicMaterial({ color: 0xff3b68, transparent: true, opacity: 0.96 }),
+  );
+  const inner = new THREE.Mesh(
+    new THREE.TorusGeometry(6.8, 0.22, 8, 56),
+    new THREE.MeshBasicMaterial({ color: 0x8cf6ff, transparent: true, opacity: 0.9 }),
   );
   const core = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.8, 0),
-    new THREE.MeshStandardMaterial({ color: 0xffd16b, emissive: 0xff401a, emissiveIntensity: 0.85, roughness: 0.35 }),
+    new THREE.OctahedronGeometry(2.35, 0),
+    new THREE.MeshStandardMaterial({ color: 0xffd16b, emissive: 0xff401a, emissiveIntensity: 1.65, roughness: 0.28 }),
   );
-  const wing = new THREE.Mesh(
-    new THREE.BoxGeometry(4.6, 0.08, 0.45),
-    new THREE.MeshStandardMaterial({ color: 0x424c58, roughness: 0.55, metalness: 0.35 }),
+  const crossH = new THREE.Mesh(
+    new THREE.BoxGeometry(24, 0.18, 0.18),
+    new THREE.MeshBasicMaterial({ color: 0xffe082, transparent: true, opacity: 0.78 }),
   );
-  group.add(ring, core, wing);
-  return { group, radius: 4.1, alive: true };
+  const crossV = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 24, 0.18),
+    new THREE.MeshBasicMaterial({ color: 0xffe082, transparent: true, opacity: 0.78 }),
+  );
+  const glow = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: makeRadialTexture("#fff2a8", "#ff315f"),
+      transparent: true,
+      opacity: 0.48,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  glow.scale.set(34, 34, 1);
+  const label = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: makeTargetLabelTexture(`TGT ${index + 1}`),
+      transparent: true,
+      depthWrite: false,
+    }),
+  );
+  label.position.y = 16;
+  label.scale.set(32, 8, 1);
+  group.add(glow, outer, inner, crossH, crossV, core, label);
+  return { group, radius: 16, alive: true, seed: Math.random() * Math.PI * 2, outer, inner, core, glow };
+}
+
+function makeTargetLabelTexture(text) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 128;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "rgba(5, 12, 18, 0.72)";
+  roundRect(ctx, 20, 22, 472, 84, 18);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(140, 246, 255, 0.9)";
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.fillStyle = "#fff4b8";
+  ctx.font = "900 54px ui-monospace, Menlo, Consolas, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 256, 66);
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function createHudPlane() {
@@ -1547,6 +1608,7 @@ function updateHudTexture() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   drawReticle(ctx, cx, cy);
+  drawTargetCue(ctx);
   ctx.textAlign = "left";
   ctx.font = "700 28px ui-monospace, Menlo, Consolas, monospace";
   ctx.fillText(`${fmt(state.speed * 1.944)} kt`, 64, 92);
@@ -1556,7 +1618,7 @@ function updateHudTexture() {
 
   ctx.textAlign = "right";
   ctx.fillText(views[state.viewIndex].name, 960, 92);
-  ctx.fillText(`IPD ${fmt(state.ipdMeters * 1000)}mm`, 960, 132);
+  ctx.fillText(`LENS ${fmt(state.lensShiftPx)}px`, 960, 132);
   ctx.fillText(`FOV ${fmt(state.fovDeg)}°`, 960, 172);
   ctx.fillText(state.stereo ? "VR" : "MONO", 960, 212);
 
@@ -1587,6 +1649,51 @@ function drawReticle(ctx, cx, cy) {
   ctx.moveTo(cx, cy + 22);
   ctx.lineTo(cx, cy + 62);
   ctx.stroke();
+}
+
+function drawTargetCue(ctx) {
+  const invCamera = tempQuaternion.copy(state.baseCameraQuaternion).invert();
+  let best = null;
+  for (const target of targets) {
+    if (!target.alive) continue;
+    tempVector.copy(target.group.position).sub(state.baseCameraPosition).applyQuaternion(invCamera);
+    const depth = -tempVector.z;
+    if (depth <= 20) continue;
+    const offAxis = Math.hypot(tempVector.x, tempVector.y) / depth;
+    const score = depth * 0.001 + offAxis * 4;
+    if (!best || score < best.score) {
+      best = { x: tempVector.x, y: tempVector.y, depth, score };
+    }
+  }
+  if (!best) return;
+
+  const focal = 430;
+  const rawX = 512 + (best.x / best.depth) * focal;
+  const rawY = 256 - (best.y / best.depth) * focal;
+  const x = clamp(rawX, 92, 932);
+  const y = clamp(rawY, 78, 420);
+  const offscreen = x !== rawX || y !== rawY;
+
+  ctx.save();
+  ctx.strokeStyle = offscreen ? "#ff5e6c" : "#ffd16b";
+  ctx.fillStyle = offscreen ? "#ff5e6c" : "#ffd16b";
+  ctx.lineWidth = 5;
+  ctx.shadowColor = "rgba(255, 190, 90, 0.72)";
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 28);
+  ctx.lineTo(x + 28, y);
+  ctx.lineTo(x, y + 28);
+  ctx.lineTo(x - 28, y);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = "800 23px ui-monospace, Menlo, Consolas, monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(`TGT ${fmt(best.depth)}m`, x, y + 58);
+  ctx.restore();
 }
 
 function createMenuPlane() {
@@ -1627,7 +1734,7 @@ function updateMenuTexture() {
     `B: näkymä (${views[state.viewIndex].name})`,
     `X: ${state.stereo ? "testaa ilman laseja" : "palaa VR-stereoon"}`,
     `Y: Shinecon G05A -kalibrointi`,
-    `D-pad ←/→ IPD ${fmt(state.ipdMeters * 1000, 1)} mm`,
+    `D-pad ←/→ linssi ${fmt(state.lensShiftPx, 1)} px`,
     `D-pad ↑/↓ FOV ${fmt(state.fovDeg, 1)}°`,
     `Ohjain: ${state.gamepadConnected ? state.gamepadName || "tunnistettu" : "ei tunnistettu"}`,
     `Viimeisin nappi: ${state.lastButton}`,
