@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#06111d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Viper Deck VR</title>
+    <link rel="manifest" href="./manifest.json" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #05070a;
+        color: #f5f7fb;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+        background: #05070a;
+      }
+
+      #gameCanvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100dvh;
+        display: block;
+        background: #05070a;
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding:
+          max(18px, env(safe-area-inset-top))
+          max(16px, env(safe-area-inset-right))
+          max(18px, env(safe-area-inset-bottom))
+          max(16px, env(safe-area-inset-left));
+        background:
+          radial-gradient(circle at 50% 12%, rgba(58, 119, 166, 0.35), transparent 28%),
+          linear-gradient(180deg, rgba(4, 10, 18, 0.62), rgba(4, 8, 13, 0.93));
+        z-index: 5;
+      }
+
+      .start-panel {
+        width: min(740px, 100%);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 8px;
+        background: rgba(7, 14, 23, 0.84);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.48);
+        padding: clamp(18px, 4vw, 34px);
+        backdrop-filter: blur(18px);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #85f0ff;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.2rem, 9vw, 5.1rem);
+        line-height: 0.88;
+        letter-spacing: 0;
+      }
+
+      .version {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        margin-top: 14px;
+        padding: 5px 10px;
+        border: 1px solid rgba(133, 240, 255, 0.45);
+        border-radius: 6px;
+        color: #c8fbff;
+        background: rgba(3, 37, 52, 0.55);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.9rem;
+      }
+
+      .lead {
+        max-width: 58ch;
+        margin: 18px 0 0;
+        color: rgba(245, 247, 251, 0.84);
+        font-size: clamp(0.98rem, 2.8vw, 1.08rem);
+        line-height: 1.52;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      button {
+        min-height: 52px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        color: #f7fbff;
+        background: rgba(255, 255, 255, 0.1);
+        font: inherit;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: rgba(119, 236, 255, 0.72);
+        color: #041018;
+        background: linear-gradient(180deg, #9cf7ff, #38c8ef);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .status-card {
+        min-height: 92px;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.065);
+        color: rgba(245, 247, 251, 0.82);
+        font-size: 0.9rem;
+        line-height: 1.42;
+      }
+
+      .status-card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: #ffffff;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      #errorBanner {
+        position: fixed;
+        left: max(10px, env(safe-area-inset-left));
+        right: max(10px, env(safe-area-inset-right));
+        bottom: max(10px, env(safe-area-inset-bottom));
+        z-index: 10;
+        display: none;
+        max-height: 35vh;
+        overflow: auto;
+        border: 1px solid rgba(255, 105, 105, 0.65);
+        border-radius: 8px;
+        padding: 12px 14px;
+        background: rgba(58, 7, 12, 0.92);
+        color: #ffe8e8;
+        font: 13px/1.42 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        white-space: pre-wrap;
+      }
+
+      #hintStrip {
+        position: fixed;
+        left: max(10px, env(safe-area-inset-left));
+        right: max(10px, env(safe-area-inset-right));
+        top: max(10px, env(safe-area-inset-top));
+        z-index: 3;
+        display: none;
+        justify-content: space-between;
+        gap: 10px;
+        pointer-events: none;
+        color: rgba(245, 247, 251, 0.9);
+        font-size: 12px;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.72);
+      }
+
+      #hintStrip span {
+        padding: 5px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.34);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 680px) {
+        .actions,
+        .status-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .lead {
+          margin-top: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas" aria-label="Viper Deck VR -lentopeli"></canvas>
+
+    <div id="hintStrip" aria-hidden="true">
+      <span id="liveMode">VR stereo</span>
+      <span>Start / Esc: valikko</span>
+    </div>
+
+    <main id="startOverlay" class="overlay">
+      <section class="start-panel">
+        <p class="eyebrow">Cardboard fighter sim</p>
+        <h1>Viper Deck VR</h1>
+        <div id="versionBadge" class="version">v...</div>
+        <p class="lead">
+          Kevyt iPhone-selainpeli Shinecon G05A -tyyppisille laseille: kaksisilmainen
+          stereorenderöinti, pään 3DoF-katselu, Bluetooth-ohjain, katseella tähtäys ja
+          hävittäjämäinen lentotuntuma.
+        </p>
+        <div class="actions">
+          <button id="startVrButton" class="primary" type="button">Aloita VR-stereona</button>
+          <button id="startMonoButton" type="button">Testaa ilman laseja</button>
+        </div>
+        <div class="status-grid">
+          <div class="status-card">
+            <strong>Ohjain</strong>
+            <div id="controllerStatus">Bluetooth-ohjainta etsitään...</div>
+          </div>
+          <div class="status-card">
+            <strong>Kalibrointi</strong>
+            <div id="calibrationStatus">IPD 64 mm, FOV 78°</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="errorBanner" role="alert"></div>
+
+    <noscript>
+      <div id="errorBanner" style="display: block">JavaScript tarvitaan pelin käynnistämiseen.</div>
+    </noscript>
+
+    <script>
+      window.VIPER_BOOT_ERRORS = [];
+      window.addEventListener("error", (event) => {
+        window.VIPER_BOOT_ERRORS.push(event.error || event.message || "Tuntematon virhe");
+        const box = document.getElementById("errorBanner");
+        if (box) {
+          box.style.display = "block";
+          box.textContent = `JavaScript-virhe:\n${event.error?.stack || event.message || event}`;
+        }
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        window.VIPER_BOOT_ERRORS.push(event.reason || "Promise-virhe");
+        const box = document.getElementById("errorBanner");
+        if (box) {
+          box.style.display = "block";
+          box.textContent = `JavaScript-virhe:\n${event.reason?.stack || event.reason || event}`;
+        }
+      });
+    </script>
+    <script type="module" src="./app.js?v=0.9.3-cardboard"></script>
+  </body>
+</html>
