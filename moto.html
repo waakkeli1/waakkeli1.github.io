@@ -28,7 +28,13 @@
   .pad-status{margin-top:18px;font-size:13px;padding:8px 14px;border:1px solid rgba(255,207,107,.35);
     border-radius:999px;color:var(--dim)}
   .pad-status.ok{color:var(--gold);border-color:var(--gold)}
-  .btns{margin-top:22px;display:flex;flex-direction:column;gap:12px;width:min(320px,80vw)}
+  .mode-picker{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:10px;width:min(460px,92vw)}
+  .mode-card{padding:12px 12px;border-radius:12px;background:rgba(245,236,255,.08);
+    border:1px solid rgba(245,236,255,.22);color:var(--ink);text-align:left}
+  .mode-card.active{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,207,107,.12) inset;background:rgba(255,207,107,.12)}
+  .mode-card span{display:block;font-size:14px;font-weight:800}
+  .mode-card small{display:block;margin-top:3px;font-size:11px;line-height:1.25;color:var(--dim);font-weight:500}
+  .btns{margin-top:16px;display:flex;flex-direction:column;gap:12px;width:min(320px,80vw)}
   button{font:inherit;font-size:16px;font-weight:700;padding:15px 18px;border-radius:14px;
     border:none;cursor:pointer;color:#231c3a;background:var(--gold)}
   button.ghost{background:transparent;color:var(--ink);border:1px solid rgba(245,236,255,.35);font-weight:600}
@@ -43,6 +49,8 @@
     h1{font-size:32px} .eyebrow{margin-bottom:4px;font-size:10px}
     .sub{margin-top:5px;font-size:12px}
     .pad-status{margin-top:8px;font-size:11px;padding:6px 12px}
+    .mode-picker{margin-top:8px;grid-template-columns:1fr 1fr;width:min(420px,92vw)}
+    .mode-card{padding:8px 10px}.mode-card span{font-size:12px}.mode-card small{font-size:9px}
     .btns{margin-top:10px;flex-direction:row;width:auto;gap:10px}
     button{font-size:14px;padding:11px 16px}
     .hint{margin-top:8px;font-size:10px;line-height:1.6}
@@ -54,10 +62,14 @@
 
 <div id="start" class="overlay">
  <div class="inner">
-  <div class="eyebrow">Moto · Safari · Cardboard · v1.0</div>
+  <div class="eyebrow">Moto · Safari · Cardboard · v1.1-physics</div>
   <h1>Kii<em>to</em></h1>
   <p class="sub">Rannikkotie auringonlaskuun. Kallista kaarteisiin, ohita täpärästi, ehdi porteille ennen kuin aika loppuu.</p>
   <div id="padStatus" class="pad-status">Ohjain: paina mitä tahansa nappia herättääksesi…</div>
+  <div class="mode-picker" aria-label="Ajotila">
+    <button id="modeRoad" class="mode-card active" type="button"><span>Rannikkotie</span><small>liikenne, ohitukset ja checkpointit</small></button>
+    <button id="modeTrack" class="mode-card" type="button"><span>Rata mode</span><small>ei liikennettä, leveämpi harjoitusrata</small></button>
+  </div>
   <div class="btns">
     <button id="btnVR">Aja VR:ssä</button>
     <button id="btnMono" class="ghost">Testaa ilman laseja (2D)</button>
@@ -97,6 +109,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xf08a5e, 180, 1900);
 const rng = (a,b)=>a+Math.random()*(b-a);
 let mode = null, running = false, paused = false;
+let rideMode = 'road', selectedRideMode = 'road', trackS = 0;
 
 /* ============ ympäristövalo: pieni kuutiokartta heijastuksiin ============ */
 function gradCanvas(top, bot, w, h){
@@ -173,7 +186,7 @@ sea.rotation.x = -Math.PI/2; sea.position.y = -12.5; scene.add(sea);
 /* ============ ajajan rigi ============ */
 const rig = new THREE.Group(); scene.add(rig);
 const leanPivot = new THREE.Group(); rig.add(leanPivot);
-const head = new THREE.Group(); head.position.set(0, 1.34, 0.12); leanPivot.add(head);
+const head = new THREE.Group(); head.position.set(0, 1.72, -0.18); leanPivot.add(head);
 const camL = new THREE.PerspectiveCamera(80, 1, 0.05, 3600);
 const camR = new THREE.PerspectiveCamera(80, 1, 0.05, 3600);
 const camM = new THREE.PerspectiveCamera(78, 1, 0.05, 3600);
@@ -351,6 +364,81 @@ function manageChunks(){
   }
 }
 
+/* ============ suljettu harjoitusrata ============ */
+const TR = { half:6.1, wall:7.35, N:420 };
+const TT = { samples:[], N:0 };
+const trackGroup = new THREE.Group(); scene.add(trackGroup);
+trackGroup.visible = false;
+function trackPoint(a){
+  return new THREE.Vector3(
+    94*(1-Math.cos(a)) + 16*Math.sin(a*3.0),
+    0.035,
+    -142*Math.sin(a) - 24*Math.sin(a*2.0)
+  );
+}
+function buildTrackScene(){
+  const pts = [];
+  for(let i=0;i<TR.N;i++) pts.push(trackPoint(i/TR.N*Math.PI*2));
+  TT.samples.length = 0;
+  for(let i=0;i<TR.N;i++){
+    const p = pts[i], prev = pts[(i-1+TR.N)%TR.N], next = pts[(i+1)%TR.N];
+    const t = next.clone().sub(prev).normalize();
+    const yaw = Math.atan2(-t.x, -t.z);
+    TT.samples.push({p, yaw, r:new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw))});
+  }
+  TT.N = TT.samples.length;
+  const pos=[], uv=[], idx=[];
+  TT.samples.forEach((s,i)=>{
+    pos.push(s.p.x-s.r.x*TR.half,0.04,s.p.z-s.r.z*TR.half,
+             s.p.x+s.r.x*TR.half,0.04,s.p.z+s.r.z*TR.half);
+    uv.push(0,i/5,1,i/5);
+    const j=(i+1)%TT.N, v=i*2, n=j*2;
+    idx.push(v,n,v+1, v+1,n,n+1);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  const asphalt = new THREE.Mesh(geo, roadMat);
+  asphalt.material.side = THREE.DoubleSide;
+  trackGroup.add(asphalt);
+  const infield = new THREE.Mesh(new THREE.CircleGeometry(86, 48),
+    new THREE.MeshLambertMaterial({color:'#31513b', roughness:1}));
+  infield.rotation.x = -Math.PI/2;
+  infield.position.set(94, -0.02, 0);
+  infield.scale.set(1.05, 1.48, 1);
+  trackGroup.add(infield);
+  const curbGeo = new THREE.BoxGeometry(1.45, 0.12, 0.42);
+  const redMat = new THREE.MeshStandardMaterial({color:'#d84d4d', roughness:0.65});
+  const whiteMat = new THREE.MeshStandardMaterial({color:'#f4f0e8', roughness:0.55});
+  for(let edge=-1; edge<=1; edge+=2){
+    const curbs = new THREE.InstancedMesh(curbGeo, edge<0 ? redMat : whiteMat, 96);
+    const M = new THREE.Matrix4();
+    for(let k=0;k<96;k++){
+      const s = TT.samples[Math.floor(k/96*TT.N)];
+      const p = s.p.clone().addScaledVector(s.r, edge*(TR.half+0.24));
+      M.makeRotationY(s.yaw);
+      M.setPosition(p.x, 0.12, p.z);
+      curbs.setMatrixAt(k, M);
+    }
+    trackGroup.add(curbs);
+  }
+  const coneGeo = new THREE.ConeGeometry(0.28, 0.8, 8);
+  const coneMat = new THREE.MeshStandardMaterial({color:'#ff8f38', roughness:0.7});
+  const cones = new THREE.InstancedMesh(coneGeo, coneMat, 72);
+  const M = new THREE.Matrix4();
+  for(let k=0;k<72;k++){
+    const s = TT.samples[Math.floor(k/72*TT.N)];
+    const side = k%2 ? 1 : -1;
+    const p = s.p.clone().addScaledVector(s.r, side*(TR.wall+0.35));
+    M.compose(new THREE.Vector3(p.x, 0.42, p.z), new THREE.Quaternion(),
+      new THREE.Vector3(1,1,1));
+    cones.setMatrixAt(k, M);
+  }
+  trackGroup.add(cones);
+}
+buildTrackScene();
+
 /* kaukosaaret */
 const isles = [];
 for(let i=0;i<7;i++){
@@ -368,6 +456,16 @@ const chromeMat = new THREE.MeshStandardMaterial({color:'#cfd0e6', metalness:1.0
 const rubberMat = new THREE.MeshStandardMaterial({color:'#151222', roughness:0.95});
 const goldMat = new THREE.MeshStandardMaterial({color:'#ffcf6b', metalness:0.9, roughness:0.3});
 const bikeParts = new THREE.Group(); bikeLean.add(bikeParts);
+function tubeBetween(a, b, r, mat){
+  const av = new THREE.Vector3(a[0], a[1], a[2]);
+  const bv = new THREE.Vector3(b[0], b[1], b[2]);
+  const d = bv.clone().sub(av);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 8), mat);
+  m.position.copy(av).add(bv).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d.normalize());
+  bikeParts.add(m);
+  return m;
+}
 
 /* tankki (lathe-pisara) */
 {
@@ -384,6 +482,31 @@ const bikeParts = new THREE.Group(); bikeLean.add(bikeParts);
 /* istuin + takaosa */
 const seat = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.66), blackMat);
 seat.position.set(0, 0.88, 0.42); bikeParts.add(seat);
+const tail = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.48), paintMat);
+tail.position.set(0, 0.9, 0.83); tail.rotation.x = -0.08; bikeParts.add(tail);
+const rearTire = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.09, 12, 24), rubberMat);
+rearTire.rotation.y = Math.PI/2; rearTire.position.set(0, 0.32, 0.92); bikeParts.add(rearTire);
+const rearRim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.06, 14), chromeMat);
+rearRim.rotation.z = Math.PI/2; rearRim.position.copy(rearTire.position); bikeParts.add(rearRim);
+const rearFender = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.045, 8, 14, Math.PI*0.72), paintMat);
+rearFender.rotation.set(0, Math.PI/2, -Math.PI*0.2);
+rearFender.position.set(0, 0.44, 0.92); bikeParts.add(rearFender);
+const engine = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.38), chromeMat);
+engine.position.set(0, 0.55, 0.0); bikeParts.add(engine);
+const engineDark = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.26), blackMat);
+engineDark.position.set(0, 0.47, -0.02); bikeParts.add(engineDark);
+for(const s of [-1,1]){
+  tubeBetween([s*0.18,0.92,-0.34],[s*0.25,0.42,0.9],0.025,blackMat);
+  tubeBetween([s*0.2,0.83,0.55],[s*0.24,0.36,0.9],0.026,chromeMat);
+  tubeBetween([s*0.18,0.92,-0.34],[s*0.22,0.48,-0.08],0.024,blackMat);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.035,0.08), chromeMat);
+  foot.position.set(s*0.32,0.52,0.12); bikeParts.add(foot);
+}
+const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.06,0.9,12), chromeMat);
+exhaust.rotation.set(Math.PI/2,0,0.18);
+exhaust.position.set(0.31,0.47,0.55); bikeParts.add(exhaust);
+const chain = new THREE.Mesh(new THREE.BoxGeometry(0.045,0.035,0.86), blackMat);
+chain.position.set(-0.26,0.37,0.52); chain.rotation.x = 0.08; bikeParts.add(chain);
 /* runko keula */
 const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.42, 8), blackMat);
 stem.rotation.x = 0.42; stem.position.set(0, 1.02, -0.72); bikeParts.add(stem);
@@ -393,7 +516,7 @@ for(const s of [-1,1]){
 }
 /* etupyörä + lokari */
 const tire = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.075, 10, 22), rubberMat);
-tire.position.set(0, 0.31, -1.12); bikeParts.add(tire);
+tire.rotation.y = Math.PI/2; tire.position.set(0, 0.31, -1.12); bikeParts.add(tire);
 const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 12), chromeMat);
 rim.rotation.z = Math.PI/2; rim.position.copy(tire.position); bikeParts.add(rim);
 const fender = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 8, 12, Math.PI*0.7), paintMat);
@@ -428,8 +551,8 @@ for(const s of [-1,1]){
 const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.34, 14, 1, true, Math.PI*0.68, Math.PI*0.64),
   new THREE.MeshBasicMaterial({color:'#bcd9f0', transparent:true, opacity:0.16,
     side:THREE.DoubleSide, depthWrite:false}));
-shield.rotation.x = -0.35;
-shield.position.set(0, 1.4, -0.78); bikeParts.add(shield);
+shield.rotation.x = -0.38;
+shield.position.set(0, 1.33, -0.78); bikeParts.add(shield);
 
 /* mittaristo (elävä) */
 const gaugeCanvas = document.createElement('canvas'); gaugeCanvas.width=384; gaugeCanvas.height=256;
@@ -525,7 +648,8 @@ function menuItems(){
     return [['Jatka','takaisin ajoon'],
             ['Aloita alusta','uusi yritys'],
             ['Ohjausherkkyys','◄  ' + Math.round(steerSens*100) + ' %  ►'],
-            ['Kamerakallistus','◄  ' + Math.round(camLean*100) + ' %  ►']];
+            ['Kamerakallistus','◄  ' + Math.round(camLean*100) + ' %  ►'],
+            ['Ajotila', rideMode === 'track' ? 'Rata mode' : 'Rannikkotie']];
   return [['Aja uudestaan','sama meno']];
 }
 function drawMenu(){
@@ -544,21 +668,22 @@ function drawMenu(){
     y0 = 300;
   }
   const items = menuItems();
+  const compact = items.length > 4;
   items.forEach(([name, desc], i)=>{
-    const y = y0 + i*(items.length > 3 ? 100 : 112);
+    const y = y0 + i*(compact ? 78 : (items.length > 3 ? 100 : 112));
     if(i === menuSel){
       g.fillStyle='rgba(255,207,107,0.16)';
-      g.beginPath(); g.roundRect ? g.roundRect(70, y-52, 884, 92, 20) : g.rect(70, y-52, 884, 92); g.fill();
-      g.fillStyle='#ffcf6b'; g.font='800 50px -apple-system, sans-serif'; g.textAlign='left';
+      g.beginPath(); g.roundRect ? g.roundRect(70, y-(compact?42:52), 884, compact?70:92, 18) : g.rect(70, y-(compact?42:52), 884, compact?70:92); g.fill();
+      g.fillStyle='#ffcf6b'; g.font='800 ' + (compact?38:50) + 'px -apple-system, sans-serif'; g.textAlign='left';
       g.fillText('►', 96, y+16);
     }
-    g.font='700 46px -apple-system, sans-serif'; g.textAlign='left';
+    g.font='700 ' + (compact?34:46) + 'px -apple-system, sans-serif'; g.textAlign='left';
     g.fillStyle = i===menuSel ? '#ffcf6b' : '#e9defa';
     g.fillText(name, 160, y+8);
-    g.font='400 30px -apple-system, sans-serif'; g.fillStyle='#b9a8d8';
+    g.font='400 ' + (compact?24:30) + 'px -apple-system, sans-serif'; g.fillStyle='#b9a8d8';
     g.fillText(desc, 560, y+8);
   });
-  g.fillStyle='#b9a8d8'; g.font='600 36px -apple-system, sans-serif'; g.textAlign='center';
+  g.fillStyle='#b9a8d8'; g.font='600 ' + (compact?28:36) + 'px -apple-system, sans-serif'; g.textAlign='center';
   g.fillText('ristiohjain ↑↓ · ✕ valitse' + (menuState==='pause' ? ' · ◄ ► säädä · Options jatka' : ''), 512, 590);
   menuTex.needsUpdate = true;
 }
@@ -573,15 +698,17 @@ function menuAction(){
     if(menuSel === 0) closeMenu();
     else if(menuSel === 1){ resetRun(); closeMenu(); showNotice('Uusi yritys'); }
     else if(menuSel === 2){ steerSens = steerSens >= 1.3 ? 0.3 : Math.round((steerSens+0.1)*10)/10; drawMenu(); }
-    else { camLean = camLean >= 0.6 ? 0 : Math.round((camLean+0.1)*10)/10; drawMenu(); }
+    else if(menuSel === 3){ camLean = camLean >= 0.6 ? 0 : Math.round((camLean+0.1)*10)/10; drawMenu(); }
+    else { toggleRideMode(true); drawMenu(); }
   } else if(menuState === 'results'){
     resetRun(); closeMenu();
   }
 }
 
 /* ============ pyörän fysiikka ============ */
-const bike = { yaw:0, v:0, lean:0, vLat:0 };
-let crashed = false, crashT = 0, wobble = 0;
+const bike = { yaw:0, v:0, lean:0, leanV:0, vLat:0, lastIdx:0 };
+let headRoll = 0;
+let crashed = false, crashT = 0, wobble = 0, invulnT = 0;
 let score = 0, dist = 0, best = 0, timeLeft = 45, nextCp = 700, prevZ = 0, playerLat = 1.9;
 const cpGroup = new THREE.Group(); scene.add(cpGroup);
 {
@@ -595,10 +722,18 @@ const cpGroup = new THREE.Group(); scene.add(cpGroup);
   beam.position.y = 2.5; cpGroup.add(beam);
 }
 function placeCp(){
+  if(rideMode === 'track' && TT.N){
+    const s = TT.samples[Math.floor(nextCp) % TT.N];
+    cpGroup.position.copy(s.p);
+    cpGroup.rotation.y = s.yaw;
+    cpGroup.scale.set(1.45, 1, 1);
+    return;
+  }
   const z = -nextCp;
   const th = cYaw(z);
   cpGroup.position.set(cX(z), 0, z);
   cpGroup.rotation.y = th;
+  cpGroup.scale.set(1, 1, 1);
 }
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _vW = new THREE.Vector3();
 function headingVectors(yaw){
@@ -607,17 +742,29 @@ function headingVectors(yaw){
 }
 function stepBike(dt, steerIn, thr, brk){
   const kmh = bike.v*3.6;
-  const onRoad = Math.abs(playerLat) < RD.half;
+  const onRoad = Math.abs(playerLat) < RD.half || rideMode === 'track';
   const grip = onRoad ? 1 : 0.55;
-  /* kallistus */
-  const maxLean = Math.min(0.72, 0.14 + bike.v*0.013) * grip;
-  const leanT = crashed ? Math.sign(bike.lean||1)*1.25 : -steerIn * steerSens * maxLean;
-  bike.lean += (leanT - bike.lean) * Math.min(1, (crashed?7:4.2)*dt);
+  const speed01 = Math.max(0, Math.min(1, bike.v/30));
+  /* kallistusdynamiikka: keho (pään nojaus) + ohjaustanko (tatti) + itsekeskitys */
+  const maxLean = Math.min(0.82, 0.19 + bike.v*0.014) * grip;
+  if(crashed){
+    bike.lean += (Math.sign(bike.lean||1)*1.25 - bike.lean) * Math.min(1, 7*dt);
+    bike.leanV = 0;
+  } else {
+    const barT  = steerIn * steerSens * (1.2 + 6.4*speed01);
+    const bodyT = headRoll * (4.4 + 1.8*speed01);
+    const restore = -bike.lean*(1.05 + 0.55*speed01) - bike.leanV*(2.15 + 0.45*speed01);
+    const fallIn = Math.sin(bike.lean) * 0.18 * speed01;
+    bike.leanV += (barT + bodyT + restore - fallIn) * dt;
+    bike.lean  += bike.leanV * dt;
+    if(bike.lean >  maxLean){ bike.lean =  maxLean; if(bike.leanV > 0) bike.leanV = 0; }
+    if(bike.lean < -maxLean){ bike.lean = -maxLean; if(bike.leanV < 0) bike.leanV = 0; }
+  }
   if(!onRoad && !crashed) wobble = Math.min(1, wobble + dt*2); else wobble = Math.max(0, wobble - dt*3);
   const leanVis = bike.lean + Math.sin(performance.now()*0.02)*0.05*wobble;
-  /* kääntyminen kallistuksesta */
+  /* kääntyminen kallistuksesta (kallistus oikealle = kaarre oikealle) */
   let yawRate = -9.81 * Math.tan(bike.lean) / Math.max(bike.v, 6);
-  if(bike.v < 8) yawRate += -steerIn*steerSens*0.6*(8-bike.v)/8;
+  if(bike.v < 10) yawRate += -steerIn*steerSens*0.72*(10-bike.v)/10;
   if(crashed) yawRate *= 0.25;
   bike.yaw += yawRate*dt;
   /* pituus */
@@ -638,19 +785,43 @@ function stepBike(dt, steerIn, thr, brk){
   bikeLean.rotation.z = -leanVis;
   leanPivot.rotation.z = -leanVis * camLean;
   /* tie-avaruus */
-  const z = rig.position.z;
-  const th = cYaw(z), rx = Math.cos(th);
-  playerLat = (rig.position.x - cX(z)) * rx;
-  if(Math.abs(playerLat) > RD.wall){
-    const vr = _vW.x*rx;
-    if((Math.abs(vr) > 5.5 || bike.v > 22) && !crashed && playerLat < 0) doCrash();  // kaide
-    if(playerLat > 0 && bike.v > 20 && !crashed) doCrash();                          // kallio
-    const over = Math.abs(playerLat) - RD.wall;
-    rig.position.x -= Math.sign(playerLat) * over * rx;
-    if(Math.sign(vr) === Math.sign(playerLat)){ bike.vLat *= 0.1; bike.v *= 0.97; }
+  if(rideMode === 'track'){
+    const S = TT.samples, N = TT.N;
+    let bi = bike.lastIdx, bd = Infinity;
+    for(let k=-60;k<=60;k++){
+      const i = (bike.lastIdx + k + N) % N;
+      const dx = rig.position.x - S[i].p.x, dzz = rig.position.z - S[i].p.z;
+      const d = dx*dx + dzz*dzz;
+      if(d < bd){ bd = d; bi = i; }
+    }
+    bike.lastIdx = bi;
+    const s0 = S[bi];
+    playerLat = (rig.position.x - s0.p.x)*s0.r.x + (rig.position.z - s0.p.z)*s0.r.z;
+    trackS = bi / N;
+    if(Math.abs(playerLat) > TR.wall){
+      const vr = _vW.x*s0.r.x + _vW.z*s0.r.z;
+      if((Math.abs(vr) > 5.5 || bike.v > 22) && !crashed) doCrash();
+      const over = Math.abs(playerLat) - TR.wall;
+      rig.position.x -= s0.r.x*Math.sign(playerLat)*over;
+      rig.position.z -= s0.r.z*Math.sign(playerLat)*over;
+      if(Math.sign(vr) === Math.sign(playerLat)){ bike.vLat *= 0.1; bike.v *= 0.97; }
+    }
+  } else {
+    const z = rig.position.z;
+    const th = cYaw(z), rx = Math.cos(th);
+    playerLat = (rig.position.x - cX(z)) * rx;
+    if(Math.abs(playerLat) > RD.wall){
+      const vr = _vW.x*rx;
+      if((Math.abs(vr) > 5.5 || bike.v > 22) && !crashed && playerLat < 0) doCrash();  // kaide
+      if(playerLat > 0 && bike.v > 20 && !crashed) doCrash();                          // kallio
+      const over = Math.abs(playerLat) - RD.wall;
+      rig.position.x -= Math.sign(playerLat) * over * rx;
+      if(Math.sign(vr) === Math.sign(playerLat)){ bike.vLat *= 0.1; bike.v *= 0.97; }
+    }
   }
 }
 function doCrash(){
+  if(crashed) return;
   crashed = true; crashT = 2.1;
   timeLeft = Math.max(0, timeLeft - 5);
   showNotice('KAATUMINEN −5 s');
@@ -658,6 +829,12 @@ function doCrash(){
 }
 function respawn(){
   crashed = false; wobble = 0;
+  if(rideMode === 'track' && TT.N){
+    const s = TT.samples[bike.lastIdx || 0];
+    rig.position.copy(s.p);
+    bike.yaw = s.yaw; bike.v = 8; bike.vLat = 0; bike.lean = 0; playerLat = 0;
+    return;
+  }
   const z = rig.position.z;
   const th = cYaw(z), rx = Math.cos(th), rz = -Math.sin(th);
   rig.position.set(cX(z) + rx*RD.lane, 0, z + rz*RD.lane);
@@ -698,30 +875,43 @@ const traffic = [];
 function createVehicle(){
   const root = buildCar();
   scene.add(root);
-  return { root, dir:-1, z:0, speed:0, off:RD.lane, nmArmed:false };
+  return { root, dir:-1, z:0, speed:0, targetSpeed:0, off:RD.lane, nmArmed:false };
 }
 function spawnVehicle(n){
   const pz = rig.position.z;
   n.dir = Math.random() < 0.45 ? 1 : -1;    // 1 = vastaantuleva
   for(let t=0;t<20;t++){
-    n.z = pz - rng(130, 640);
+    n.z = pz - (n.dir === 1 ? rng(180, 720) : rng(100, 560));
     let ok = Math.abs(n.z - pz) > 40;
     for(const m of traffic){ if(m!==n && m.dir===n.dir && Math.abs(m.z-n.z)<70) ok=false; }
     if(ok) break;
   }
   n.off = n.dir===1 ? -RD.lane : RD.lane;
-  n.speed = n.dir===1 ? rng(15, 21) : rng(13, 20);
+  n.targetSpeed = n.dir===1 ? rng(15, 21) : rng(12, 17);
+  n.speed = n.targetSpeed;
   n.nmArmed = false;
+  n.root.visible = rideMode === 'road';
 }
 function updateTraffic(dt){
+  if(rideMode === 'track'){
+    for(const n of traffic) n.root.visible = false;
+    return;
+  }
   const pz = rig.position.z;
   for(const n of traffic){
+    n.root.visible = true;
+    n.speed += (n.targetSpeed - n.speed) * Math.min(1, dt*0.7);
     /* sama suunta: jarruta edellä ajavalle */
     if(n.dir === -1){
       for(const m of traffic){
         if(m===n || m.dir!==-1 || m.z >= n.z) continue;
         const d = n.z - m.z;
-        if(d < 12 + n.speed*1.2) n.speed = Math.max(m.speed, n.speed - 4*dt);
+        if(d < 16 + n.speed*1.45) n.speed = Math.min(n.speed, Math.max(5, m.speed - 1.5));
+      }
+      const behind = n.z - pz;
+      if(behind > -5 && behind < 80){
+        n.speed = Math.min(n.speed, Math.max(4, bike.v - 2.5));
+        if(behind < 16) n.z = pz + 16;
       }
     }
     n.z += n.dir === 1 ? n.speed*dt : -n.speed*dt;
@@ -759,10 +949,15 @@ function overlap(A,B){
   return true;
 }
 function checkHits(){
-  if(crashed) return;
+  if(crashed || rideMode === 'track') return;
   const A = obb(rig.position.x, rig.position.z, bike.yaw, 0.38, 1.1);
   for(const n of traffic){
     if(Math.abs(n.z - rig.position.z) > 6) continue;
+    if(n.dir === -1 && n.z > rig.position.z - 1.5){
+      n.z = rig.position.z + 18;
+      n.speed = Math.min(n.speed, Math.max(4, bike.v - 3));
+      continue;
+    }
     const B = obb(n.root.position.x, n.root.position.z, n.root.rotation.y, 0.95, 2.15);
     if(overlap(A,B)){ doCrash(); return; }
   }
@@ -831,7 +1026,9 @@ const qScreen = new THREE.Quaternion();
 const qFix = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 const deviceQ = new THREE.Quaternion();
 const calQ = new THREE.Quaternion();
+const poseEuler = new THREE.Euler();
 let haveOrientation = false;
+let rollZero = 0;
 window.addEventListener('deviceorientation', (e)=>{
   if(e.alpha===null) return;
   haveOrientation = true;
@@ -854,6 +1051,21 @@ function recenter(){
   if(f.lengthSq() < 1e-6) return;
   f.normalize();
   calQ.setFromAxisAngle(new THREE.Vector3(0,1,0), -Math.atan2(f.x, -f.z));
+  poseEuler.setFromQuaternion(calQ.clone().multiply(deviceQ), 'YXZ');
+  rollZero = poseEuler.z;
+  headRoll = 0;
+}
+function updateHeadPose(dt, padLean){
+  const a = Math.min(1, dt*8);
+  if(mode==='vr' && haveOrientation){
+    head.quaternion.copy(calQ).multiply(deviceQ);
+    poseEuler.setFromQuaternion(head.quaternion, 'YXZ');
+    const target = Math.max(-0.65, Math.min(0.65, poseEuler.z - rollZero));
+    headRoll += (target - headRoll) * a;
+  } else {
+    head.quaternion.setFromEuler(new THREE.Euler(monoPitch, monoYaw, padLean*0.25, 'YXZ'));
+    headRoll += (padLean - headRoll) * a;
+  }
 }
 let monoYaw = 0, monoPitch = 0, dragging=false, lastX=0, lastY=0;
 canvas.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; });
@@ -888,19 +1100,56 @@ function pressed(p, i){
   prevButtons[i] = now;
   return now && !was;
 }
+function syncModeButtons(){
+  const road = document.getElementById('modeRoad');
+  const track = document.getElementById('modeTrack');
+  if(road) road.classList.toggle('active', selectedRideMode === 'road');
+  if(track) track.classList.toggle('active', selectedRideMode === 'track');
+}
+function syncModeVisibility(){
+  world.visible = rideMode === 'road';
+  trackGroup.visible = rideMode === 'track';
+  for(const n of traffic) n.root.visible = rideMode === 'road';
+}
+function setRideMode(next, restart){
+  selectedRideMode = next;
+  if(restart || !running) rideMode = next;
+  syncModeButtons();
+  if(restart && running){
+    resetRun();
+    showNotice(rideMode === 'track' ? 'RATA MODE' : 'RANNIKKOTIE');
+  }
+}
+function toggleRideMode(restart){
+  setRideMode((restart ? rideMode : selectedRideMode) === 'track' ? 'road' : 'track', restart);
+}
 
 /* ============ ajon hallinta ============ */
 function resetRun(){
+  rideMode = selectedRideMode;
   crashed = false; crashT = 0; wobble = 0;
-  score = 0; dist = 0; timeLeft = 45; nextCp = 700;
-  const th = cYaw(0), rx = Math.cos(th), rz = -Math.sin(th);
-  rig.position.set(cX(0) + rx*RD.lane, 0, rz*RD.lane);
-  bike.yaw = th; bike.v = 0; bike.vLat = 0; bike.lean = 0;
-  prevZ = 0; playerLat = RD.lane;
+  score = 0; dist = 0; timeLeft = rideMode === 'track' ? 60 : 45;
+  syncModeVisibility();
+  if(rideMode === 'track' && TT.N){
+    bike.lastIdx = 0;
+    const s = TT.samples[0];
+    rig.position.copy(s.p);
+    bike.yaw = s.yaw; bike.v = 0; bike.vLat = 0; bike.lean = 0; bike.leanV = 0;
+    prevZ = rig.position.z; playerLat = 0; nextCp = Math.floor(TT.N * 0.25);
+  } else {
+    nextCp = 700;
+    const th = cYaw(0), rx = Math.cos(th), rz = -Math.sin(th);
+    rig.position.set(cX(0) + rx*RD.lane, 0, rz*RD.lane);
+    bike.yaw = th; bike.v = 0; bike.vLat = 0; bike.lean = 0; bike.leanV = 0;
+    prevZ = 0; playerLat = RD.lane;
+  }
   placeCp();
-  manageChunks();
+  if(rideMode === 'road') manageChunks();
   while(traffic.length < 9) traffic.push(createVehicle());
-  for(const n of traffic) spawnVehicle(n);
+  for(const n of traffic){
+    n.root.visible = rideMode === 'road';
+    if(rideMode === 'road') spawnVehicle(n);
+  }
 }
 
 /* ============ renderöinti ============ */
@@ -923,7 +1172,7 @@ function loop(t){
   if(!running) return;
 
   const p = getPad();
-  let steerIn = 0, thr = 0, brk = 0;
+  let steerIn = 0, thr = 0, brk = 0, padLean = 0;
   if(p){
     if(!padWasOk){ padWasOk=true; updatePadStatus(p); }
     if(pressed(p,9)){
@@ -938,10 +1187,12 @@ function loop(t){
       if(pressed(p,14)){
         if(row===2){ steerSens = Math.max(0.3, Math.round((steerSens-0.1)*10)/10); drawMenu(); }
         if(row===3){ camLean = Math.max(0, Math.round((camLean-0.1)*10)/10); drawMenu(); }
+        if(row===4){ toggleRideMode(true); drawMenu(); }
       }
       if(pressed(p,15)){
         if(row===2){ steerSens = Math.min(1.3, Math.round((steerSens+0.1)*10)/10); drawMenu(); }
         if(row===3){ camLean = Math.min(0.6, Math.round((camLean+0.1)*10)/10); drawMenu(); }
+        if(row===4){ toggleRideMode(true); drawMenu(); }
       }
       if(pressed(p,0)) menuAction();
     } else {
@@ -953,9 +1204,12 @@ function loop(t){
       if(pressed(p,13)) adjustZoom(-1);
     }
     steerIn = dz(p.axes[0]||0);
+    padLean = dz(p.axes[2]||0) * 0.52;
     thr = (p.buttons[7] && p.buttons[7].value) || 0;
     brk = (p.buttons[6] && p.buttons[6].value) || 0;
   }
+
+  updateHeadPose(dt, padLean);
 
   if(!paused){
     stepBike(dt/2, steerIn, thr, brk);
@@ -975,18 +1229,23 @@ function loop(t){
       const a = 2.4 + i*0.32;
       m.position.set(px - 700 - i*130, -10, pz - 900 + Math.sin(a)*700);
     });
-    manageChunks();
+    if(rideMode === 'road') manageChunks();
     /* pisteet & aika */
     if(!crashed){
-      const moved = prevZ - pz;
+      const moved = rideMode === 'track' ? bike.v*dt : prevZ - pz;
       if(moved > 0) dist += moved;
       const kmh = bike.v*3.6;
       if(kmh > 80) score += (kmh-80)*dt*0.9;
       timeLeft -= dt;
-      if(-pz > nextCp){
-        timeLeft = Math.min(60, timeLeft + 12);
-        score += 250; nextCp += 700; placeCp();
-        chime(); showNotice('CHECKPOINT +12 s');
+      const hitCp = rideMode === 'track'
+        ? (((bike.lastIdx - nextCp + TT.N) % TT.N) < 8)
+        : (-pz > nextCp);
+      if(hitCp){
+        timeLeft = Math.min(rideMode === 'track' ? 75 : 60, timeLeft + (rideMode === 'track' ? 9 : 12));
+        score += rideMode === 'track' ? 300 : 250;
+        nextCp = rideMode === 'track' ? (nextCp + Math.floor(TT.N*0.25)) % TT.N : nextCp + 700;
+        placeCp();
+        chime(); showNotice(rideMode === 'track' ? 'CHECKPOINT +9 s' : 'CHECKPOINT +12 s');
       }
       if(timeLeft <= 0){
         best = Math.max(best, score);
@@ -999,12 +1258,6 @@ function loop(t){
     prevZ = pz;
   }
   updateAudio(thr);
-
-  if(mode==='vr' && haveOrientation){
-    head.quaternion.copy(calQ).multiply(deviceQ);
-  } else {
-    head.quaternion.setFromEuler(new THREE.Euler(monoPitch, monoYaw, 0, 'YXZ'));
-  }
 
   hudT += dt;
   if(hudT > 0.06){
@@ -1036,6 +1289,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 async function begin(m){
   mode = m;
+  rideMode = selectedRideMode;
   initAudio();
   if(actx && actx.state === 'suspended'){ try{ actx.resume(); }catch(e){} }
   if(m==='vr'){
@@ -1057,11 +1311,14 @@ async function begin(m){
   setTimeout(recenter, 600);
   setTimeout(recenter, 1500);
 }
+document.getElementById('modeRoad').addEventListener('click', ()=>setRideMode('road', false));
+document.getElementById('modeTrack').addEventListener('click', ()=>setRideMode('track', false));
 document.getElementById('btnVR').addEventListener('click', ()=>begin('vr'));
 document.getElementById('btnMono').addEventListener('click', ()=>begin('mono'));
 setInterval(()=>{
   if(!running){ const p=getPad(); if(p) updatePadStatus(p); }
 }, 300);
+syncModeButtons();
 resize();
 </script>
 </body>
