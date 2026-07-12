@@ -10,7 +10,8 @@
   :root{
     --bg:#070912; --panel:#111522; --panel2:#171d2e; --text:#f4f7ff; --muted:#9da8c2;
     --cyan:#67e8f9; --green:#72f1a5; --red:#ff6b7d; --line:rgba(255,255,255,.14);
-    --lens:-80px; --zoom:1.08; --yoff:0px; --xleft:var(--lens); --xright:calc(var(--lens) * -1);
+    --lens:-80px; --lens-view:-28px; --zoom:1.08; --yoff:0px;
+    --xleft:var(--lens-view); --xright:calc(var(--lens-view) * -1);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
@@ -51,12 +52,37 @@
   #viewer{position:absolute;inset:0;background:#02040b;display:none;z-index:1}
   #viewer.active{display:block}
   .eyes{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;background:#02040b}
-  .eye{position:relative;overflow:hidden;background:#000;border-right:1px solid #03050b}
+  .eye{position:relative;overflow:hidden;background:#030611;border-right:1px solid #03050b}
   .eye:nth-child(2){border-right:none;border-left:1px solid #03050b}
-  .eyeInner{position:absolute;inset:0;transform-origin:center center;transform:translate(var(--eye-x),var(--yoff)) scale(var(--zoom))}
+  .eye::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;
+    background:radial-gradient(ellipse at center,transparent 48%,rgba(0,0,0,.36) 100%)}
+  .eyeInner{position:absolute;inset:-2%;transform-origin:center center;
+    transform:translate(var(--eye-x),var(--yoff)) scale(var(--zoom));overflow:hidden;
+    background:
+      radial-gradient(circle at 72% 18%,rgba(245,249,255,.95) 0 2.5%,rgba(168,210,255,.34) 3.2%,transparent 7%),
+      radial-gradient(circle at 22% 18%,rgba(255,255,255,.55) 0 1px,transparent 2px),
+      radial-gradient(circle at 39% 12%,rgba(255,255,255,.45) 0 1px,transparent 2px),
+      radial-gradient(circle at 62% 31%,rgba(255,255,255,.38) 0 1px,transparent 2px),
+      linear-gradient(#071022 0%,#102745 46%,#25425b 63%,#08111f 64%,#05080f 100%)}
+  .eyeInner::before{content:"";position:absolute;left:-8%;right:-8%;bottom:33%;height:31%;z-index:0;pointer-events:none;
+    background:
+      linear-gradient(135deg,transparent 0 16%,rgba(11,25,40,.95) 16% 38%,transparent 38%),
+      linear-gradient(45deg,transparent 0 12%,rgba(16,35,52,.94) 12% 35%,transparent 35%),
+      linear-gradient(120deg,transparent 0 43%,rgba(10,22,36,.98) 43% 68%,transparent 68%);
+    filter:drop-shadow(0 -8px 18px rgba(87,143,174,.16))}
+  .eyeInner::after{content:"";position:absolute;left:-8%;right:-8%;bottom:-4%;height:42%;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 8%,rgba(103,232,249,.18),transparent 36%),
+      linear-gradient(180deg,rgba(21,59,73,.86),rgba(5,10,18,.96) 62%,#03050b);
+    border-top:1px solid rgba(103,232,249,.18)}
   .eye.left .eyeInner{--eye-x:var(--xleft)}
   .eye.right .eyeInner{--eye-x:var(--xright)}
-  .ytSlot,.directSlot{position:absolute;inset:0;width:100%;height:100%;background:#000}
+  .ytSlot,.directSlot{position:absolute;left:50%;top:45%;width:min(76%,72vh);aspect-ratio:16/9;height:auto;
+    transform:translate(-50%,-50%);background:#000;z-index:2;overflow:hidden;border-radius:5px;
+    border:1px solid rgba(210,234,255,.42);
+    box-shadow:0 0 0 5px rgba(5,8,15,.72),0 18px 60px rgba(0,0,0,.72),0 0 70px rgba(103,232,249,.15)}
+  .ytSlot::after,.directSlot::after{content:"";position:absolute;left:18%;right:18%;bottom:-18px;height:15px;
+    background:radial-gradient(ellipse at center,rgba(0,0,0,.62),transparent 72%);pointer-events:none}
   .ytSlot iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
   .directSlot{overflow:hidden}
   .directSlot video{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;background:#000}
@@ -106,11 +132,11 @@
   <section id="home" class="home">
     <div class="panel">
       <div class="topline">
-        <div class="version">Cardboard Video Deck v0.1</div>
+        <div class="version">Cardboard Video Deck v0.2-theater</div>
         <button id="btnDemo" class="secondary" type="button">Demo-linkki</button>
       </div>
-      <h1>YouTube Cardboard</h1>
-      <p class="lead">Liitä YouTube-linkki ja katso se kahdessa synkatussa ruudussa Shinecon/Cardboard-laseilla. Suorille MP4- tai stream-linkeille mukana on myös oma video-tila.</p>
+      <h1>YouTube Theater</h1>
+      <p class="lead">Liitä YouTube-linkki ja katso se kelluvana valkokankaana rauhallisessa Cardboard-maisemassa. Suorille MP4- tai stream-linkeille mukana on myös oma video-tila.</p>
 
       <div class="grid">
         <div class="field">
@@ -149,7 +175,7 @@
 
       <div id="padStatus" class="pad">Ohjain: paina mitä tahansa nappia herättääksesi.</div>
       <p class="small">
-        <b>Ohjaus:</b> D-pad vasen/oikea säätää linssien offsetia, ylös/alas zoomia. L1/R1 siirtää kuvaa ylös/alas.
+        <b>Ohjaus:</b> D-pad vasen/oikea säätää silmien maisemaoffsetia, ylös/alas teatterin kokoa. L1/R1 siirtää näkymää ylös/alas.
         Options avaa valikon, X play/pause, kolmio keskittää. YouTube-tilassa oikea soitin on mykistetty kaikumisen estämiseksi.
       </p>
     </div>
@@ -166,7 +192,7 @@
       <button id="btnPlay" type="button" title="Play/Pause">▶</button>
       <button id="btnMenu" type="button" title="Valikko">☰</button>
     </div>
-    <div id="hud" class="hud">LENS <span>-80px</span> · ZOOM <span>1.08</span> · Y <span>0px</span> · SYNC <span>...</span></div>
+    <div id="hud" class="hud">LENS <span>-80px</span> · SIZE <span>1.08</span> · Y <span>0px</span> · SYNC <span>...</span></div>
     <div id="menu" class="menu">
       <h2>Asetukset</h2>
       <div class="menuRows">
@@ -176,7 +202,7 @@
         <button id="menuHome" class="secondary" type="button">Takaisin alkuun</button>
       </div>
       <div class="rangeRow"><label for="lensRange">Linssi</label><input id="lensRange" type="range" min="-160" max="160" step="2"><b id="lensVal">-80px</b></div>
-      <div class="rangeRow"><label for="zoomRange">Zoom</label><input id="zoomRange" type="range" min="0.75" max="1.8" step="0.01"><b id="zoomVal">1.08</b></div>
+      <div class="rangeRow"><label for="zoomRange">Koko</label><input id="zoomRange" type="range" min="0.75" max="1.8" step="0.01"><b id="zoomVal">1.08</b></div>
       <div class="rangeRow"><label for="yRange">Y-offset</label><input id="yRange" type="range" min="-160" max="160" step="2"><b id="yVal">0px</b></div>
     </div>
     <div class="rotate">Käännä iPhone vaakatasoon ennen kuin asetat puhelimen laseihin.</div>
@@ -187,7 +213,7 @@
 <script>
 'use strict';
 (function(){
-  const VERSION = '0.1';
+  const VERSION = '0.2-theater';
   const STORAGE_KEY = 'cardboard-video-deck-v1';
   const DEFAULTS = { lens:-80, zoom:1.08, yoff:0, fit:'cover' };
   const $ = id => document.getElementById(id);
@@ -233,6 +259,7 @@
   }
   function applySettings(){
     document.documentElement.style.setProperty('--lens', settings.lens + 'px');
+    document.documentElement.style.setProperty('--lens-view', Math.round(settings.lens * 0.35) + 'px');
     document.documentElement.style.setProperty('--zoom', settings.zoom.toFixed(2));
     document.documentElement.style.setProperty('--yoff', settings.yoff + 'px');
     $('lensRange').value = settings.lens;
@@ -245,7 +272,7 @@
     saveSettings();
   }
   function updateHud(sync){
-    hud.innerHTML = 'LENS <span>' + settings.lens + 'px</span> · ZOOM <span>' +
+    hud.innerHTML = 'LENS <span>' + settings.lens + 'px</span> · SIZE <span>' +
       settings.zoom.toFixed(2) + '</span> · Y <span>' + settings.yoff + 'px</span> · SYNC <span>' + sync + '</span>';
   }
   function setSourceUI(){
