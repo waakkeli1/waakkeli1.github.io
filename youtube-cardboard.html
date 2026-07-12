@@ -146,7 +146,7 @@
   <section id="home" class="home">
     <div class="panel">
       <div class="topline">
-        <div class="version">Cardboard Video Deck v0.3-gaze</div>
+        <div class="version">Cardboard Video Deck v0.4-gaze-fix</div>
         <button id="btnDemo" class="secondary" type="button">Demo-linkki</button>
       </div>
       <h1>YouTube Theater</h1>
@@ -232,7 +232,7 @@
 <script>
 'use strict';
 (function(){
-  const VERSION = '0.3-gaze';
+  const VERSION = '0.4-gaze-fix';
   const STORAGE_KEY = 'cardboard-video-deck-v1';
   const DEFAULTS = { lens:-80, zoom:1.08, yoff:0, fit:'cover' };
   const $ = id => document.getElementById(id);
@@ -254,8 +254,8 @@
   let prevButtons = {};
   let lastButtonName = '';
   let lastObjectUrl = '';
-  let latestOri = { beta:0, gamma:0, ok:false };
-  let gaze = { x:.5, y:.5, bx:0, by:0, target:null, since:0, lastFire:0, progress:0 };
+  let latestPose = { yaw:0, pitch:0, ok:false };
+  let gaze = { x:.5, y:.5, baseYaw:0, basePitch:0, hasBase:false, target:null, since:0, lastFire:0, progress:0 };
 
   window.addEventListener('error', e => showError('JavaScript-virhe: ' + (e.message || 'tuntematon')));
   window.addEventListener('unhandledrejection', e => showError('Virhe: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)));
@@ -420,6 +420,7 @@
     viewer.classList.toggle('vrActive', viewMode === 'vr');
     home.classList.add('hidden');
     if(viewMode === 'vr'){
+      gaze.hasBase = false;
       requestFullscreenSoon();
       requestGazePermission();
       setTimeout(recenterGaze, 250);
@@ -498,9 +499,67 @@
     }catch(e){}
   }
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function wrapPi(v){
+    while(v > Math.PI) v -= Math.PI * 2;
+    while(v < -Math.PI) v += Math.PI * 2;
+    return v;
+  }
+  function screenAngle(){
+    if(screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+    return window.orientation || 0;
+  }
+  function qMul(a, b){
+    return {
+      x:a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+      y:a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+      z:a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+      w:a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z
+    };
+  }
+  function qAxisZ(rad){
+    const h = rad * .5;
+    return {x:0, y:0, z:Math.sin(h), w:Math.cos(h)};
+  }
+  function qFromDevice(alpha, beta, gamma){
+    const x = beta, y = alpha, z = -gamma;
+    const c1 = Math.cos(x/2), c2 = Math.cos(y/2), c3 = Math.cos(z/2);
+    const s1 = Math.sin(x/2), s2 = Math.sin(y/2), s3 = Math.sin(z/2);
+    let q = {
+      x:s1*c2*c3 + c1*s2*s3,
+      y:c1*s2*c3 - s1*c2*s3,
+      z:c1*c2*s3 - s1*s2*c3,
+      w:c1*c2*c3 + s1*s2*s3
+    };
+    q = qMul(q, {x:-Math.SQRT1_2, y:0, z:0, w:Math.SQRT1_2});
+    q = qMul(q, qAxisZ(-screenAngle() * Math.PI / 180));
+    return q;
+  }
+  function forwardFromQ(q){
+    const vx = 0, vy = 0, vz = -1;
+    const ix =  q.w*vx + q.y*vz - q.z*vy;
+    const iy =  q.w*vy + q.z*vx - q.x*vz;
+    const iz =  q.w*vz + q.x*vy - q.y*vx;
+    const iw = -q.x*vx - q.y*vy - q.z*vz;
+    return {
+      x:ix*q.w + iw*-q.x + iy*-q.z - iz*-q.y,
+      y:iy*q.w + iw*-q.y + iz*-q.x - ix*-q.z,
+      z:iz*q.w + iw*-q.z + ix*-q.y - iy*-q.x
+    };
+  }
+  function updatePoseFromDevice(e){
+    if(e.alpha == null || e.beta == null || e.gamma == null) return;
+    const q = qFromDevice(e.alpha*Math.PI/180, e.beta*Math.PI/180, e.gamma*Math.PI/180);
+    const f = forwardFromQ(q);
+    latestPose = {
+      yaw: Math.atan2(f.x, -f.z),
+      pitch: Math.asin(clamp(f.y, -1, 1)),
+      ok: true
+    };
+  }
   function recenterGaze(){
-    gaze.bx = latestOri.ok ? latestOri.gamma : 0;
-    gaze.by = latestOri.ok ? latestOri.beta : 0;
+    gaze.baseYaw = latestPose.ok ? latestPose.yaw : 0;
+    gaze.basePitch = latestPose.ok ? latestPose.pitch : 0;
+    gaze.hasBase = latestPose.ok;
     gaze.x = .5; gaze.y = .5; gaze.target = null; gaze.since = 0;
     gazeLayer.style.setProperty('--gx', '50%');
     gazeLayer.style.setProperty('--gy', '50%');
@@ -509,9 +568,15 @@
     note('Katse keskitetty.');
   }
   function updateGazeFromOrientation(){
-    if(!latestOri.ok || !viewer.classList.contains('active') || viewMode !== 'vr') return;
-    const dx = clamp((latestOri.gamma - gaze.bx) / 34, -.42, .42);
-    const dy = clamp((latestOri.beta - gaze.by) / 42, -.34, .34);
+    if(!latestPose.ok || !viewer.classList.contains('active') || viewMode !== 'vr') return;
+    if(!gaze.hasBase){
+      gaze.baseYaw = latestPose.yaw;
+      gaze.basePitch = latestPose.pitch;
+      gaze.hasBase = true;
+      return;
+    }
+    const dx = clamp(wrapPi(latestPose.yaw - gaze.baseYaw) / .62, -.42, .42);
+    const dy = clamp(-(latestPose.pitch - gaze.basePitch) / .46, -.34, .34);
     gaze.x += ((.5 + dx) - gaze.x) * .18;
     gaze.y += ((.5 + dy) - gaze.y) * .18;
   }
@@ -687,12 +752,10 @@
     $('yRange').addEventListener('input', e=>{ settings.yoff = +e.target.value; applySettings(); });
     window.addEventListener('gamepadconnected', e=>{ padIndex = e.gamepad.index; updatePadStatus(e.gamepad); });
     window.addEventListener('gamepaddisconnected', ()=>{ padIndex = -1; updatePadStatus(null); });
-    window.addEventListener('deviceorientation', e=>{
-      if(e.beta == null || e.gamma == null) return;
-      latestOri = { beta:e.beta, gamma:e.gamma, ok:true };
-    }, true);
+    window.addEventListener('deviceorientation', updatePoseFromDevice, true);
+    window.addEventListener('orientationchange', ()=>{ if(viewer.classList.contains('active')) setTimeout(recenterGaze, 350); });
     window.addEventListener('pointermove', e=>{
-      if(!viewer.classList.contains('active') || viewMode !== 'vr' || latestOri.ok) return;
+      if(!viewer.classList.contains('active') || viewMode !== 'vr' || latestPose.ok) return;
       gaze.x = clamp(e.clientX / Math.max(1, innerWidth), .06, .94);
       gaze.y = clamp(e.clientY / Math.max(1, innerHeight), .08, .92);
     });
