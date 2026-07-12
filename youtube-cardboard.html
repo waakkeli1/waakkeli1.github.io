@@ -105,6 +105,20 @@
     display:flex;gap:8px;z-index:9}
   .controls button{width:42px;height:42px;border-radius:8px;background:rgba(18,25,40,.78);color:var(--text);
     border:1px solid rgba(255,255,255,.16);font-size:18px;padding:0}
+  .gazeLayer{position:absolute;inset:0;z-index:13;pointer-events:none;display:none}
+  #viewer.vrActive .gazeLayer{display:block}
+  .gazeDot{position:absolute;left:var(--gx,50%);top:var(--gy,50%);width:34px;height:34px;margin:-17px 0 0 -17px;
+    border:2px solid rgba(103,232,249,.9);border-radius:50%;box-shadow:0 0 18px rgba(103,232,249,.44);
+    background:radial-gradient(circle,rgba(103,232,249,.95) 0 2px,rgba(103,232,249,.08) 3px,transparent 10px)}
+  .gazeDot::after{content:"";position:absolute;inset:5px;border-radius:50%;border:2px solid rgba(114,241,165,.2);
+    border-top-color:rgba(114,241,165,.95);transform:rotate(var(--gaze-deg,0deg))}
+  .gazeDot.left{transform:translateX(-25vw)}
+  .gazeDot.right{transform:translateX(25vw)}
+  .gazeTarget{outline:2px solid rgba(103,232,249,.92)!important;box-shadow:0 0 0 4px rgba(103,232,249,.14),0 0 26px rgba(103,232,249,.35)!important}
+  input[type=range].gazeTarget{accent-color:var(--cyan)}
+  .gazeLabel{position:absolute;left:50%;top:calc(50% + 34px);transform:translateX(-50%);padding:6px 9px;border-radius:8px;
+    background:rgba(7,9,18,.78);border:1px solid rgba(103,232,249,.35);color:#dcecff;font-size:11px;font-weight:800;
+    white-space:nowrap}
   .menu{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,92vw);
     background:rgba(14,18,30,.94);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:16px;z-index:15;
     display:none;box-shadow:0 30px 100px rgba(0,0,0,.6)}
@@ -132,7 +146,7 @@
   <section id="home" class="home">
     <div class="panel">
       <div class="topline">
-        <div class="version">Cardboard Video Deck v0.2-theater</div>
+        <div class="version">Cardboard Video Deck v0.3-gaze</div>
         <button id="btnDemo" class="secondary" type="button">Demo-linkki</button>
       </div>
       <h1>YouTube Theater</h1>
@@ -176,7 +190,7 @@
       <div id="padStatus" class="pad">Ohjain: paina mitä tahansa nappia herättääksesi.</div>
       <p class="small">
         <b>Ohjaus:</b> D-pad vasen/oikea säätää silmien maisemaoffsetia, ylös/alas teatterin kokoa. L1/R1 siirtää näkymää ylös/alas.
-        Options avaa valikon, X play/pause, kolmio keskittää. YouTube-tilassa oikea soitin on mykistetty kaikumisen estämiseksi.
+        Options avaa valikon, X valitsee katseen alla olevan kohteen, kolmio keskittää katseen. YouTube-tilassa oikea soitin on mykistetty kaikumisen estämiseksi.
       </p>
     </div>
   </section>
@@ -188,22 +202,27 @@
     </div>
     <div class="divider"></div>
     <div class="controls">
-      <button id="btnBack" type="button" title="Takaisin">×</button>
-      <button id="btnPlay" type="button" title="Play/Pause">▶</button>
-      <button id="btnMenu" type="button" title="Valikko">☰</button>
+      <button id="btnBack" class="gazeable" type="button" title="Takaisin">×</button>
+      <button id="btnPlay" class="gazeable" type="button" title="Play/Pause">▶</button>
+      <button id="btnMenu" class="gazeable" type="button" title="Valikko">☰</button>
     </div>
     <div id="hud" class="hud">LENS <span>-80px</span> · SIZE <span>1.08</span> · Y <span>0px</span> · SYNC <span>...</span></div>
     <div id="menu" class="menu">
       <h2>Asetukset</h2>
       <div class="menuRows">
-        <button id="menuPlay" type="button">Play / Pause</button>
-        <button id="menuRecenter" class="secondary" type="button">Keskitä</button>
-        <button id="menuSingle" class="secondary" type="button">Yksi / kaksi ruutua</button>
-        <button id="menuHome" class="secondary" type="button">Takaisin alkuun</button>
+        <button id="menuPlay" class="gazeable" type="button">Play / Pause</button>
+        <button id="menuRecenter" class="secondary gazeable" type="button">Keskitä</button>
+        <button id="menuSingle" class="secondary gazeable" type="button">Yksi / kaksi ruutua</button>
+        <button id="menuHome" class="secondary gazeable" type="button">Takaisin alkuun</button>
       </div>
-      <div class="rangeRow"><label for="lensRange">Linssi</label><input id="lensRange" type="range" min="-160" max="160" step="2"><b id="lensVal">-80px</b></div>
-      <div class="rangeRow"><label for="zoomRange">Koko</label><input id="zoomRange" type="range" min="0.75" max="1.8" step="0.01"><b id="zoomVal">1.08</b></div>
-      <div class="rangeRow"><label for="yRange">Y-offset</label><input id="yRange" type="range" min="-160" max="160" step="2"><b id="yVal">0px</b></div>
+      <div class="rangeRow"><label for="lensRange">Linssi</label><input id="lensRange" class="gazeable" type="range" min="-160" max="160" step="2"><b id="lensVal">-80px</b></div>
+      <div class="rangeRow"><label for="zoomRange">Koko</label><input id="zoomRange" class="gazeable" type="range" min="0.75" max="1.8" step="0.01"><b id="zoomVal">1.08</b></div>
+      <div class="rangeRow"><label for="yRange">Y-offset</label><input id="yRange" class="gazeable" type="range" min="-160" max="160" step="2"><b id="yVal">0px</b></div>
+    </div>
+    <div id="gazeLayer" class="gazeLayer">
+      <div class="gazeDot left"></div>
+      <div class="gazeDot right"></div>
+      <div id="gazeLabel" class="gazeLabel">Katsevalinta</div>
     </div>
     <div class="rotate">Käännä iPhone vaakatasoon ennen kuin asetat puhelimen laseihin.</div>
   </section>
@@ -213,13 +232,14 @@
 <script>
 'use strict';
 (function(){
-  const VERSION = '0.2-theater';
+  const VERSION = '0.3-gaze';
   const STORAGE_KEY = 'cardboard-video-deck-v1';
   const DEFAULTS = { lens:-80, zoom:1.08, yoff:0, fit:'cover' };
   const $ = id => document.getElementById(id);
   const home = $('home'), viewer = $('viewer'), errorBox = $('errorBox');
   const leftSlot = $('leftSlot'), rightSlot = $('rightSlot');
   const hud = $('hud'), menu = $('menu');
+  const gazeLayer = $('gazeLayer'), gazeLabel = $('gazeLabel');
   const padStatus = $('padStatus');
   let settings = loadSettings();
   let mode = 'youtube';
@@ -234,6 +254,8 @@
   let prevButtons = {};
   let lastButtonName = '';
   let lastObjectUrl = '';
+  let latestOri = { beta:0, gamma:0, ok:false };
+  let gaze = { x:.5, y:.5, bx:0, by:0, target:null, since:0, lastFire:0, progress:0 };
 
   window.addEventListener('error', e => showError('JavaScript-virhe: ' + (e.message || 'tuntematon')));
   window.addEventListener('unhandledrejection', e => showError('Virhe: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)));
@@ -397,12 +419,19 @@
     viewer.classList.toggle('single', viewMode === 'single');
     viewer.classList.toggle('vrActive', viewMode === 'vr');
     home.classList.add('hidden');
-    if(viewMode === 'vr') requestFullscreenSoon();
+    if(viewMode === 'vr'){
+      requestFullscreenSoon();
+      requestGazePermission();
+      setTimeout(recenterGaze, 250);
+    }
     applySettings();
   }
   function exitViewer(){
     viewer.classList.remove('active','vrActive');
     menu.classList.remove('open');
+    if(gaze.target) gaze.target.classList.remove('gazeTarget');
+    gaze.target = null;
+    gaze.since = 0;
     home.classList.remove('hidden');
     try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
   }
@@ -410,6 +439,19 @@
     setTimeout(()=>{
       try{ document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(()=>{}); }catch(e){}
     }, 50);
+  }
+  async function requestGazePermission(){
+    try{
+      if(typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission){
+        const res = await DeviceOrientationEvent.requestPermission();
+        if(res !== 'granted') note('Gyrolupa ei tullut - hiiri toimii katseena testissä.');
+      }
+    }catch(e){}
+  }
+  function toggleMenu(){
+    menu.classList.toggle('open');
+    gaze.target = null;
+    gaze.since = 0;
   }
   function playPause(){
     if(mode === 'youtube'){
@@ -455,6 +497,109 @@
       }
     }catch(e){}
   }
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function recenterGaze(){
+    gaze.bx = latestOri.ok ? latestOri.gamma : 0;
+    gaze.by = latestOri.ok ? latestOri.beta : 0;
+    gaze.x = .5; gaze.y = .5; gaze.target = null; gaze.since = 0;
+    gazeLayer.style.setProperty('--gx', '50%');
+    gazeLayer.style.setProperty('--gy', '50%');
+    gazeLayer.style.setProperty('--gaze-progress', 0);
+    gazeLayer.style.setProperty('--gaze-deg', '0deg');
+    note('Katse keskitetty.');
+  }
+  function updateGazeFromOrientation(){
+    if(!latestOri.ok || !viewer.classList.contains('active') || viewMode !== 'vr') return;
+    const dx = clamp((latestOri.gamma - gaze.bx) / 34, -.42, .42);
+    const dy = clamp((latestOri.beta - gaze.by) / 42, -.34, .34);
+    gaze.x += ((.5 + dx) - gaze.x) * .18;
+    gaze.y += ((.5 + dy) - gaze.y) * .18;
+  }
+  function visibleEnough(el){
+    if(!el || el.disabled) return false;
+    const st = getComputedStyle(el);
+    if(st.display === 'none' || st.visibility === 'hidden' || +st.opacity === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 8 && r.height > 8 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+  }
+  function findGazeTarget(px, py){
+    const nodes = Array.from(document.querySelectorAll('.gazeable')).filter(visibleEnough);
+    let best = null, bestScore = Infinity;
+    for(const el of nodes){
+      const r = el.getBoundingClientRect();
+      const pad = el.type === 'range' ? 22 : 18;
+      const inside = px >= r.left-pad && px <= r.right+pad && py >= r.top-pad && py <= r.bottom+pad;
+      if(!inside) continue;
+      const cx = r.left + r.width/2, cy = r.top + r.height/2;
+      const score = Math.hypot(px-cx, py-cy) + Math.max(0, r.width*r.height/8000);
+      if(score < bestScore){ best = el; bestScore = score; }
+    }
+    return best;
+  }
+  function setRangeFromGaze(el, px){
+    const r = el.getBoundingClientRect();
+    const min = parseFloat(el.min || '0'), max = parseFloat(el.max || '100');
+    const step = parseFloat(el.step || '1');
+    const t = clamp((px - r.left) / Math.max(1, r.width), 0, 1);
+    let v = min + (max-min)*t;
+    v = Math.round(v/step)*step;
+    el.value = clamp(v, min, max);
+    el.dispatchEvent(new Event('input', {bubbles:true}));
+  }
+  function nudgeRange(el, dir){
+    if(!el || el.type !== 'range') return false;
+    const min = parseFloat(el.min || '0'), max = parseFloat(el.max || '100');
+    const step = parseFloat(el.step || '1');
+    const mul = el.id === 'zoomRange' ? 3 : 2;
+    el.value = clamp(parseFloat(el.value) + step*mul*dir, min, max);
+    el.dispatchEvent(new Event('input', {bubbles:true}));
+    return true;
+  }
+  function activateGazeTarget(el){
+    if(!el || !visibleEnough(el)) return false;
+    if(el.type === 'range'){
+      setRangeFromGaze(el, gaze.x * innerWidth);
+      note((el.previousElementSibling ? el.previousElementSibling.textContent : 'Säädin') + ' säädetty');
+      return true;
+    }
+    el.click();
+    return true;
+  }
+  function gazeName(el){
+    if(!el) return 'Katsevalinta';
+    if(el.type === 'range') return (el.previousElementSibling ? el.previousElementSibling.textContent : 'Säädin') + ': katso kohtaa';
+    return el.getAttribute('title') || el.textContent.trim() || 'Valitse';
+  }
+  function gazeLoop(t){
+    updateGazeFromOrientation();
+    const px = gaze.x * innerWidth, py = gaze.y * innerHeight;
+    gazeLayer.style.setProperty('--gx', (gaze.x*100).toFixed(2) + '%');
+    gazeLayer.style.setProperty('--gy', (gaze.y*100).toFixed(2) + '%');
+    const target = viewer.classList.contains('active') && viewMode === 'vr' ? findGazeTarget(px, py) : null;
+    if(target !== gaze.target){
+      if(gaze.target) gaze.target.classList.remove('gazeTarget');
+      gaze.target = target;
+      gaze.since = t;
+      gaze.progress = 0;
+      if(gaze.target) gaze.target.classList.add('gazeTarget');
+    }
+    if(gaze.target){
+      gaze.progress = clamp((t - gaze.since) / 1150, 0, 1);
+      gazeLabel.textContent = gazeName(gaze.target);
+      gazeLabel.style.display = 'block';
+      if(gaze.progress >= 1 && t - gaze.lastFire > 900){
+        gaze.lastFire = t;
+        activateGazeTarget(gaze.target);
+        gaze.since = t + 250;
+      }
+    } else {
+      gaze.progress = 0;
+      gazeLabel.style.display = 'none';
+    }
+    gazeLayer.style.setProperty('--gaze-progress', gaze.progress.toFixed(3));
+    gazeLayer.style.setProperty('--gaze-deg', Math.round(gaze.progress * 360) + 'deg');
+    requestAnimationFrame(gazeLoop);
+  }
   function adjustLens(delta){ settings.lens = Math.max(-160, Math.min(160, settings.lens + delta)); applySettings(); }
   function adjustZoom(delta){ settings.zoom = Math.max(.75, Math.min(1.8, +(settings.zoom + delta).toFixed(2))); applySettings(); }
   function adjustY(delta){ settings.yoff = Math.max(-160, Math.min(160, settings.yoff + delta)); applySettings(); }
@@ -466,7 +611,7 @@
   function recenter(){
     settings.yoff = 0;
     applySettings();
-    note('Keskitetty.');
+    recenterGaze();
   }
   function toggleSingle(){
     viewMode = viewMode === 'single' ? 'vr' : 'single';
@@ -502,11 +647,13 @@
     const p = getPad();
     if(p){
       updatePadStatus(p);
-      if(pressed(p,0)) playPause();
+      if(pressed(p,0)){
+        if(!activateGazeTarget(gaze.target)) playPause();
+      }
       if(pressed(p,3)) recenter();
-      if(pressed(p,9)) menu.classList.toggle('open');
-      if(pressed(p,14)) adjustLens(-4);
-      if(pressed(p,15)) adjustLens(4);
+      if(pressed(p,9)) toggleMenu();
+      if(pressed(p,14)){ if(!nudgeRange(gaze.target, -1)) adjustLens(-4); }
+      if(pressed(p,15)){ if(!nudgeRange(gaze.target, 1)) adjustLens(4); }
       if(pressed(p,12)) adjustZoom(.03);
       if(pressed(p,13)) adjustZoom(-.03);
       if(pressed(p,4)) adjustY(-4);
@@ -530,7 +677,7 @@
     $('btnReset').addEventListener('click', resetCalibration);
     $('btnBack').addEventListener('click', exitViewer);
     $('btnPlay').addEventListener('click', playPause);
-    $('btnMenu').addEventListener('click', ()=>menu.classList.toggle('open'));
+    $('btnMenu').addEventListener('click', toggleMenu);
     $('menuPlay').addEventListener('click', playPause);
     $('menuRecenter').addEventListener('click', recenter);
     $('menuSingle').addEventListener('click', toggleSingle);
@@ -540,6 +687,15 @@
     $('yRange').addEventListener('input', e=>{ settings.yoff = +e.target.value; applySettings(); });
     window.addEventListener('gamepadconnected', e=>{ padIndex = e.gamepad.index; updatePadStatus(e.gamepad); });
     window.addEventListener('gamepaddisconnected', ()=>{ padIndex = -1; updatePadStatus(null); });
+    window.addEventListener('deviceorientation', e=>{
+      if(e.beta == null || e.gamma == null) return;
+      latestOri = { beta:e.beta, gamma:e.gamma, ok:true };
+    }, true);
+    window.addEventListener('pointermove', e=>{
+      if(!viewer.classList.contains('active') || viewMode !== 'vr' || latestOri.ok) return;
+      gaze.x = clamp(e.clientX / Math.max(1, innerWidth), .06, .94);
+      gaze.y = clamp(e.clientY / Math.max(1, innerHeight), .08, .92);
+    });
     window.addEventListener('keydown', e=>{
       if(e.key === 'Escape') exitViewer();
       if(e.key === ' ') { e.preventDefault(); playPause(); }
@@ -549,13 +705,14 @@
       if(e.key === 'ArrowDown') adjustZoom(-.03);
       if(e.key === '[') adjustY(-4);
       if(e.key === ']') adjustY(4);
-      if(e.key.toLowerCase() === 'm') menu.classList.toggle('open');
+      if(e.key.toLowerCase() === 'm') toggleMenu();
     });
   }
   bind();
   setSourceUI();
   applySettings();
   gamepadLoop();
+  requestAnimationFrame(gazeLoop);
 })();
 </script>
 </body>
