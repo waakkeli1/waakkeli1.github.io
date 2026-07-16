@@ -86,24 +86,55 @@ function clearRouteLayers() {
   state.layers.route = []; state.layers.markers = [];
 }
 
-/* ================= geokoodaus (Photon) ================= */
-async function geocode(q) {
+/* ================= geokoodaus (Photon + varalla Nominatim) ================= */
+function fetchT(url, ms) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms || 7000);
+  return fetch(url, { signal: c.signal }).finally(() => clearTimeout(t));
+}
+async function geocodePhoton(q) {
   const c = map.getCenter();
   const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=fi&lat=${c.lat}&lon=${c.lng}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('Paikkahaku epäonnistui');
+  const r = await fetchT(url);
+  if (!r.ok) throw new Error('Photon ' + r.status);
   const j = await r.json();
   return (j.features || [])
     .filter(f => (f.properties.countrycode || 'FI').toUpperCase() === 'FI')
     .map(f => {
       const p = f.properties;
-      const parts = [p.name || p.street, p.housenumber, p.city || p.county].filter(Boolean);
+      const parts = [p.name || p.street, p.housenumber].filter(Boolean);
       return {
         lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
-        label: parts.slice(0, 2).join(' ') || q,
+        label: parts.join(' ') || q,
         detail: [p.postcode, p.city || p.county, p.state].filter(Boolean).join(', ')
       };
     });
+}
+async function geocodeNominatim(q) {
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=fi&accept-language=fi&q=${encodeURIComponent(q)}`;
+  const r = await fetchT(url, 9000);
+  if (!r.ok) throw new Error('Nominatim ' + r.status);
+  const j = await r.json();
+  return j.map(f => {
+    const parts = String(f.display_name || '').split(',').map(s => s.trim());
+    return { lat: +f.lat, lon: +f.lon, label: f.name || parts[0] || q, detail: parts.slice(1, 4).join(', ') };
+  });
+}
+// fallback=false: vain Photon (ehdotukset kirjoittaessa — Nominatimia ei saa käyttää
+// jatkuvaan hakuun sen käyttöehtojen takia). fallback=true: varmistetaan Nominatimilla.
+async function geocode(q, opts) {
+  const fallback = !opts || opts.fallback !== false;
+  try {
+    const res = await geocodePhoton(q);
+    if (res.length || !fallback) return res;
+  } catch (e1) {
+    if (!fallback) throw e1;
+  }
+  try {
+    return await geocodeNominatim(q);
+  } catch (e2) {
+    throw new Error('Paikkahaku ei nyt vastaa (kokeiltiin kahta palvelua). Tarkista nettiyhteys tai yritä hetken päästä uudestaan.');
+  }
 }
 
 function wireSearchField(inputId, sugId, key) {
@@ -116,7 +147,7 @@ function wireSearchField(inputId, sugId, key) {
     if (q.length < 3 || q === 'Oma sijainti') { sug.style.display = 'none'; return; }
     t = setTimeout(async () => {
       try {
-        const res = await geocode(q);
+        const res = await geocode(q, { fallback: false });
         sug.innerHTML = '';
         res.forEach(hit => {
           const b = document.createElement('button');
@@ -137,15 +168,35 @@ function wireSearchField(inputId, sugId, key) {
 wireSearchField('fromInput', 'fromSug', 'from');
 wireSearchField('toInput', 'toSug', 'to');
 
-$('useLoc').onclick = () => { $('fromInput').value = 'Oma sijainti'; state.from = null; };
+$('useLoc').onclick = async () => {
+  $('fromInput').value = 'Oma sijainti'; state.from = null;
+  try {
+    loading(true, 'Haetaan sijaintiasi…');
+    const pos = await getPosition();
+    state.from = pos;
+    map.setView([pos.lat, pos.lon], 15);
+    loading(false);
+    toast('Sijainti löytyi ✓');
+  } catch (e) {
+    loading(false);
+    toast(e.message, true);
+  }
+};
 
+function geoErrText(e) {
+  if (e && e.code === 1) return 'Sijaintilupa on estetty tälle sivulle. Safarissa: osoitepalkin "aA"- tai sivuvalikko → Verkkosivuston asetukset → Sijainti → Salli. Tarkista myös: Asetukset → Tietosuoja ja turvallisuus → Sijaintipalvelut → Safarin verkkosivustot → Käytettäessä.';
+  if (e && e.code === 2) return 'Sijaintia ei pystytty määrittämään (ei GPS/verkkopaikannusta). Kokeile ikkunan äärellä tai ulkona.';
+  if (e && e.code === 3) return 'Sijainnin haku kesti liian kauan. Yritä uudestaan — ensimmäinen GPS-lukko voi kestää hetken.';
+  return 'Sijaintia ei saatu: ' + ((e && e.message) || 'tuntematon virhe');
+}
 function getPosition() {
   return new Promise((res, rej) => {
-    if (!navigator.geolocation) return rej(new Error('Sijainti ei ole käytettävissä'));
+    if (!navigator.geolocation) return rej(new Error('Tämä selain ei tue sijaintia'));
+    if (!window.isSecureContext) return rej(new Error('Sijainti vaatii https-osoitteen — avaa sivu GitHub Pages -osoitteesta'));
     navigator.geolocation.getCurrentPosition(
       p => res({ lat: p.coords.latitude, lon: p.coords.longitude, label: 'Oma sijainti' }),
-      e => rej(new Error('Sijaintia ei saatu: salli sijainti Safarin asetuksista')),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
+      e => rej(new Error(geoErrText(e))),
+      { enableHighAccuracy: true, timeout: 25000, maximumAge: 30000 }
     );
   });
 }
@@ -434,7 +485,7 @@ function renderSummary(rt) {
 async function computeRoute() {
   try {
     let fromLL = state.from, toLL = state.to;
-    if ($('fromInput').value.trim() === 'Oma sijainti' || (!fromLL && !$('fromInput').value.trim())) {
+    if (!fromLL && ($('fromInput').value.trim() === 'Oma sijainti' || !$('fromInput').value.trim())) {
       loading(true, 'Haetaan sijaintiasi…');
       fromLL = await getPosition();
     }
@@ -535,8 +586,8 @@ function startNav() {
   if (!state.layers.me) state.layers.me = L.marker(map.getCenter(), { icon: meIcon }).addTo(map);
   map.setZoom(17);
   state.nav.watchId = navigator.geolocation.watchPosition(onFix, err => {
-    toast('GPS-signaali katkesi: ' + err.message, true);
-  }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+    toast(geoErrText(err), true);
+  }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 25000 });
   toast('Navigointi käynnissä. Aja varovasti!');
 }
 function stopNav(arrived) {
