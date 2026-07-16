@@ -1,0 +1,2223 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8fafc">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Moporeitti">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Moporeitti</title>
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: rgba(255, 255, 255, 0.96);
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3ec;
+      --road: #2563eb;
+      --path: #059669;
+      --warn: #c2410c;
+      --amber: #f59e0b;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+      --radius: 8px;
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: #d8efe8;
+    }
+
+    .top-panel {
+      position: fixed;
+      top: calc(env(safe-area-inset-top) + 10px);
+      left: 10px;
+      right: 10px;
+      z-index: 700;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(219, 227, 236, 0.9);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .brand-row,
+    .input-row,
+    .action-row,
+    .metric-row,
+    .setting-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-row {
+      justify-content: space-between;
+      min-height: 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .brand small {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: #ecfeff;
+      color: #0f766e;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .input-row {
+      min-width: 0;
+    }
+
+    .input-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .input-wrap input {
+      width: 100%;
+      height: 43px;
+      padding: 0 12px 0 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      outline: 0;
+      background: #fff;
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .input-wrap input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+    }
+
+    .input-wrap svg {
+      position: absolute;
+      top: 11px;
+      left: 11px;
+      width: 20px;
+      height: 20px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .btn,
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .btn {
+      flex: 1;
+      gap: 8px;
+      padding: 0 12px;
+      font-size: 15px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .icon-btn {
+      flex: 0 0 42px;
+      width: 42px;
+      padding: 0;
+    }
+
+    .btn svg,
+    .icon-btn svg,
+    .brand svg,
+    .sheet-title svg,
+    .follow-banner svg {
+      width: 19px;
+      height: 19px;
+      stroke-width: 2.4;
+    }
+
+    .btn.primary {
+      border-color: #111827;
+      background: #111827;
+      color: #fff;
+    }
+
+    .btn.accent {
+      border-color: rgba(5, 150, 105, 0.2);
+      background: #ecfdf5;
+      color: #047857;
+    }
+
+    .btn.warning {
+      border-color: rgba(194, 65, 12, 0.24);
+      background: #fff7ed;
+      color: var(--warn);
+    }
+
+    .btn:disabled,
+    .icon-btn:disabled {
+      cursor: wait;
+      opacity: 0.62;
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 42px;
+    }
+
+    .status {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .sheet {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: calc(env(safe-area-inset-bottom) + 10px);
+      z-index: 720;
+      display: none;
+      max-height: min(52vh, 470px);
+      overflow: hidden;
+      border: 1px solid rgba(219, 227, 236, 0.9);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .sheet.visible {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sheet-head {
+      display: grid;
+      gap: 8px;
+      padding: 10px 10px 8px;
+      border-bottom: 1px solid rgba(219, 227, 236, 0.82);
+    }
+
+    .sheet-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 900;
+    }
+
+    .sheet-title span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid #edf2f7;
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .metric strong {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: clamp(17px, 4.7vw, 23px);
+      line-height: 1.05;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .metric small {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .route-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .route-split b {
+      color: var(--ink);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--road);
+    }
+
+    .swatch.path {
+      background: var(--path);
+    }
+
+    .swatch.access {
+      background: #64748b;
+    }
+
+    .sheet-scroll {
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 10px 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .notice {
+      margin: 0 0 8px;
+      padding: 8px;
+      border-radius: var(--radius);
+      background: #fff7ed;
+      color: #9a3412;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .instructions {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .instructions li {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 9px 8px;
+      border: 1px solid #edf2f7;
+      border-radius: var(--radius);
+      background: #fff;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+
+    .step-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #eff6ff;
+      color: var(--road);
+    }
+
+    .step-icon.path {
+      background: #ecfdf5;
+      color: var(--path);
+    }
+
+    .step-icon.finish {
+      background: #fff7ed;
+      color: var(--warn);
+    }
+
+    .step-icon svg {
+      width: 17px;
+      height: 17px;
+      stroke-width: 2.5;
+    }
+
+    .step-text {
+      min-width: 0;
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .step-sub {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .step-dist {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    details.settings {
+      margin-top: 8px;
+      border-top: 1px solid rgba(219, 227, 236, 0.82);
+      padding-top: 8px;
+    }
+
+    details.settings summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      list-style-position: inside;
+    }
+
+    .setting-row {
+      justify-content: space-between;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .setting-row label {
+      min-width: 112px;
+      font-weight: 700;
+    }
+
+    .setting-row input[type="range"] {
+      width: 46%;
+      accent-color: #111827;
+    }
+
+    .setting-row select {
+      max-width: 52%;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .follow-banner {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      top: calc(env(safe-area-inset-top) + 170px);
+      z-index: 710;
+      display: none;
+      align-items: center;
+      gap: 9px;
+      padding: 10px;
+      border-radius: var(--radius);
+      background: #111827;
+      color: #fff;
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .follow-banner.visible {
+      display: flex;
+    }
+
+    .follow-banner small {
+      display: block;
+      margin-top: 2px;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom) + 18px);
+      z-index: 900;
+      width: min(92vw, 390px);
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      background: #111827;
+      color: #fff;
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      font-weight: 750;
+      line-height: 1.35;
+      opacity: 0;
+      transform: translate(-50%, 16px);
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .marker-pin {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: 3px solid #fff;
+      border-radius: 50% 50% 50% 6px;
+      background: #111827;
+      box-shadow: 0 5px 14px rgba(15, 23, 42, 0.32);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      transform: rotate(-45deg);
+    }
+
+    .marker-pin span {
+      transform: rotate(45deg);
+    }
+
+    .marker-pin.end {
+      background: var(--warn);
+    }
+
+    .marker-pin.user {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #0ea5e9;
+      transform: none;
+    }
+
+    .leaflet-top.leaflet-right {
+      top: calc(env(safe-area-inset-top) + 10px);
+      right: 10px;
+    }
+
+    .leaflet-control-zoom {
+      display: none;
+      border: 0 !important;
+      box-shadow: var(--shadow);
+    }
+
+    .leaflet-control-zoom a {
+      border-color: var(--line) !important;
+      color: var(--ink) !important;
+    }
+
+    .leaflet-control-attribution {
+      border-radius: 6px 6px 0 0;
+      background: rgba(255, 255, 255, 0.9) !important;
+      color: #475569 !important;
+      font-size: 10px;
+    }
+
+    body.has-route .toast {
+      bottom: calc(env(safe-area-inset-bottom) + 246px);
+    }
+
+    @media (min-width: 720px) {
+      .top-panel {
+        width: 430px;
+        right: auto;
+      }
+
+      .sheet {
+        width: 430px;
+        right: auto;
+      }
+
+      .follow-banner {
+        width: 430px;
+        right: auto;
+      }
+
+      .leaflet-control-zoom {
+        display: block;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .btn {
+        padding: 0 8px;
+        font-size: 14px;
+      }
+
+      .brand {
+        font-size: 17px;
+      }
+
+      .metrics {
+        gap: 6px;
+      }
+
+      .metric {
+        padding: 7px 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="map" aria-label="Kartta"></main>
+
+  <section class="top-panel" aria-label="Reittihaku">
+    <div class="brand-row">
+      <div class="brand">
+        <i data-lucide="bike"></i>
+        <span>Moporeitti</span>
+        <small>PKS</small>
+      </div>
+      <button id="locateStart" class="icon-btn" type="button" title="Oma sijainti lähtönä" aria-label="Oma sijainti lähtönä">
+        <i data-lucide="locate-fixed"></i>
+      </button>
+    </div>
+
+    <div class="input-row">
+      <div class="input-wrap">
+        <i data-lucide="circle-dot"></i>
+        <input id="startInput" autocomplete="street-address" inputmode="search" placeholder="Lähtö">
+      </div>
+      <button id="pickStart" class="icon-btn" type="button" title="Valitse lähtö kartalta" aria-label="Valitse lähtö kartalta">
+        <i data-lucide="map-pin"></i>
+      </button>
+    </div>
+
+    <div class="input-row">
+      <div class="input-wrap">
+        <i data-lucide="flag"></i>
+        <input id="endInput" autocomplete="street-address" inputmode="search" placeholder="Määränpää">
+      </div>
+      <button id="pickEnd" class="icon-btn" type="button" title="Valitse määränpää kartalta" aria-label="Valitse määränpää kartalta">
+        <i data-lucide="map-pin"></i>
+      </button>
+    </div>
+
+    <div class="action-row">
+      <button id="routeButton" class="btn primary" type="button">
+        <i data-lucide="route"></i>
+        <span>Hae reitti</span>
+      </button>
+      <button id="followButton" class="btn accent" type="button" disabled>
+        <i data-lucide="navigation"></i>
+        <span>Seuraa</span>
+      </button>
+      <button id="swapButton" class="icon-btn" type="button" title="Vaihda suunta" aria-label="Vaihda suunta">
+        <i data-lucide="arrow-up-down"></i>
+      </button>
+    </div>
+
+    <div id="status" class="status">Valitse lähtö ja määränpää pääkaupunkiseudulta.</div>
+  </section>
+
+  <section id="routeSheet" class="sheet" aria-label="Reitti">
+    <div class="sheet-head">
+      <div class="sheet-title">
+        <span><i data-lucide="navigation-2"></i> Nopein mopoille sallittu reitti</span>
+        <button id="closeSheet" class="icon-btn" type="button" title="Piilota reitti" aria-label="Piilota reitti">
+          <i data-lucide="chevron-down"></i>
+        </button>
+      </div>
+
+      <div class="metrics">
+        <div class="metric">
+          <strong id="timeMetric">--</strong>
+          <small>Ajoaika</small>
+        </div>
+        <div class="metric">
+          <strong id="distanceMetric">--</strong>
+          <small>Matka</small>
+        </div>
+        <div class="metric">
+          <strong id="savingMetric">--</strong>
+          <small>Säästö</small>
+        </div>
+      </div>
+
+      <div class="route-split">
+        <div>Tiet <b id="roadMetric">--</b></div>
+        <div>Mopoväylät <b id="pathMetric">--</b></div>
+      </div>
+
+      <div class="legend" aria-label="Reitin värit">
+        <span><i class="swatch"></i>tie</span>
+        <span><i class="swatch path"></i>mopoille sallittu väylä</span>
+        <span><i class="swatch access"></i>liitos</span>
+      </div>
+    </div>
+
+    <div class="sheet-scroll">
+      <p id="warningBox" class="notice" hidden></p>
+      <ol id="instructions" class="instructions"></ol>
+
+      <details class="settings">
+        <summary>Asetukset ja aineisto</summary>
+        <div class="setting-row">
+          <label for="pathSpeed">Mopoväylä</label>
+          <input id="pathSpeed" type="range" min="20" max="45" step="5" value="30">
+          <span id="pathSpeedValue">30 km/h</span>
+        </div>
+        <div class="setting-row">
+          <label for="paddingKm">Hakualue</label>
+          <input id="paddingKm" type="range" min="2" max="8" step="1" value="4">
+          <span id="paddingValue">4 km</span>
+        </div>
+        <div class="setting-row">
+          <label for="overpassEndpoint">Overpass</label>
+          <select id="overpassEndpoint">
+            <option value="https://overpass-api.de/api/interpreter">overpass-api.de</option>
+            <option value="https://overpass.private.coffee/api/interpreter">private.coffee</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <span>Aineisto</span>
+          <span>OpenStreetMap</span>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <div id="followBanner" class="follow-banner" role="status" aria-live="polite">
+    <i data-lucide="navigation"></i>
+    <div>
+      <div id="nextStep">Seuranta käynnissä</div>
+      <small id="remainingStep">--</small>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script>
+    (() => {
+      "use strict";
+
+      const PKS_BOUNDS = {
+        south: 60.055,
+        west: 24.35,
+        north: 60.43,
+        east: 25.42
+      };
+
+      const HIGHWAY_PATTERN = [
+        "motorway",
+        "motorway_link",
+        "trunk",
+        "trunk_link",
+        "primary",
+        "primary_link",
+        "secondary",
+        "secondary_link",
+        "tertiary",
+        "tertiary_link",
+        "unclassified",
+        "residential",
+        "living_street",
+        "service",
+        "road",
+        "track",
+        "pedestrian",
+        "footway",
+        "path",
+        "cycleway"
+      ].join("|");
+
+      const ROAD_QUERY_PATTERN = [
+        "trunk",
+        "trunk_link",
+        "primary",
+        "primary_link",
+        "secondary",
+        "secondary_link",
+        "tertiary",
+        "tertiary_link",
+        "unclassified",
+        "residential",
+        "living_street",
+        "service",
+        "road",
+        "track"
+      ].join("|");
+
+      const MOPED_PATH_QUERY_PATTERN = ["pedestrian", "footway", "path", "cycleway"].join("|");
+
+      const ROAD_TYPES = new Set([
+        "trunk",
+        "trunk_link",
+        "primary",
+        "primary_link",
+        "secondary",
+        "secondary_link",
+        "tertiary",
+        "tertiary_link",
+        "unclassified",
+        "residential",
+        "living_street",
+        "service",
+        "road",
+        "track"
+      ]);
+
+      const PATH_TYPES = new Set(["pedestrian", "footway", "path", "cycleway"]);
+      const MOPED_YES = new Set(["yes", "designated", "permissive", "official"]);
+      const ACCESS_NO = new Set(["no", "private", "customers", "agricultural", "forestry"]);
+
+      const FALLBACK_SPEEDS = {
+        living_street: 20,
+        service: 30,
+        residential: 30,
+        track: 25,
+        road: 40,
+        unclassified: 40,
+        tertiary: 50,
+        tertiary_link: 40,
+        secondary: 50,
+        secondary_link: 40,
+        primary: 50,
+        primary_link: 40,
+        trunk: 60,
+        trunk_link: 40
+      };
+
+      const els = {};
+      const state = {
+        map: null,
+        routeLayer: null,
+        markers: {},
+        points: { start: null, end: null },
+        selectMode: null,
+        route: null,
+        instructions: [],
+        watchId: null,
+        wakeLock: null,
+        toastTimer: null,
+        geocodeCache: loadJson("moporeitti.geocode", {}),
+        lastRouteRequest: null
+      };
+
+      document.addEventListener("DOMContentLoaded", init);
+
+      function init() {
+        bindElements();
+        initMap();
+        bindEvents();
+        updateSettingLabels();
+        renderIcons();
+      }
+
+      function bindElements() {
+        [
+          "startInput",
+          "endInput",
+          "locateStart",
+          "pickStart",
+          "pickEnd",
+          "routeButton",
+          "followButton",
+          "swapButton",
+          "status",
+          "routeSheet",
+          "closeSheet",
+          "timeMetric",
+          "distanceMetric",
+          "savingMetric",
+          "roadMetric",
+          "pathMetric",
+          "warningBox",
+          "instructions",
+          "pathSpeed",
+          "pathSpeedValue",
+          "paddingKm",
+          "paddingValue",
+          "overpassEndpoint",
+          "followBanner",
+          "nextStep",
+          "remainingStep",
+          "toast"
+        ].forEach((id) => {
+          els[id] = document.getElementById(id);
+        });
+
+        const savedEndpoint = localStorage.getItem("moporeitti.overpass");
+        if (savedEndpoint) {
+          els.overpassEndpoint.value = savedEndpoint;
+        }
+      }
+
+      function initMap() {
+        state.map = L.map("map", {
+          zoomControl: false,
+          attributionControl: false
+        }).setView([60.1921, 24.9458], 12);
+
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "© OpenStreetMap contributors"
+        }).addTo(state.map);
+
+        L.control.zoom({ position: "topright" }).addTo(state.map);
+        L.control.attribution({ position: "bottomleft", prefix: false })
+          .addAttribution("© OpenStreetMap contributors")
+          .addTo(state.map);
+
+        state.routeLayer = L.layerGroup().addTo(state.map);
+      }
+
+      function bindEvents() {
+        state.map.on("click", onMapClick);
+        els.pickStart.addEventListener("click", () => setSelectMode("start"));
+        els.pickEnd.addEventListener("click", () => setSelectMode("end"));
+        els.locateStart.addEventListener("click", locateStart);
+        els.routeButton.addEventListener("click", calculateRoute);
+        els.followButton.addEventListener("click", toggleFollow);
+        els.swapButton.addEventListener("click", swapPoints);
+        els.closeSheet.addEventListener("click", () => {
+          els.routeSheet.classList.remove("visible");
+          document.body.classList.remove("has-route");
+        });
+        els.pathSpeed.addEventListener("input", updateSettingLabels);
+        els.paddingKm.addEventListener("input", updateSettingLabels);
+        els.overpassEndpoint.addEventListener("change", () => {
+          localStorage.setItem("moporeitti.overpass", els.overpassEndpoint.value);
+        });
+        els.startInput.addEventListener("input", () => clearPointIfTyped("start"));
+        els.endInput.addEventListener("input", () => clearPointIfTyped("end"));
+      }
+
+      function renderIcons() {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }
+
+      function setSelectMode(mode) {
+        state.selectMode = mode;
+        const label = mode === "start" ? "lähtö" : "määränpää";
+        setStatus(`Napauta kartalta ${label}.`);
+        showToast(`Napauta kartalta ${label}.`);
+      }
+
+      function onMapClick(event) {
+        if (!state.selectMode) {
+          return;
+        }
+        const mode = state.selectMode;
+        state.selectMode = null;
+        const point = { lat: event.latlng.lat, lon: event.latlng.lng };
+        setPoint(mode, point, "Karttapiste");
+        setStatus(mode === "start" ? "Lähtö asetettu kartalta." : "Määränpää asetettu kartalta.");
+      }
+
+      function setPoint(kind, point, label) {
+        state.points[kind] = point;
+        const input = kind === "start" ? els.startInput : els.endInput;
+        input.value = `${label} ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+        updateMarker(kind, point);
+      }
+
+      function clearPointIfTyped(kind) {
+        state.points[kind] = null;
+      }
+
+      function updateMarker(kind, point) {
+        const isEnd = kind === "end";
+        const icon = L.divIcon({
+          className: "",
+          html: `<div class="marker-pin ${isEnd ? "end" : ""}"><span>${isEnd ? "M" : "L"}</span></div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 30]
+        });
+
+        if (state.markers[kind]) {
+          state.markers[kind].setLatLng([point.lat, point.lon]);
+        } else {
+          state.markers[kind] = L.marker([point.lat, point.lon], { icon }).addTo(state.map);
+        }
+      }
+
+      function locateStart() {
+        if (!navigator.geolocation) {
+          showToast("Sijainti ei ole käytettävissä tällä selaimella.");
+          return;
+        }
+
+        setBusy(true, "Haen sijaintia...");
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setBusy(false);
+            const point = {
+              lat: position.coords.latitude,
+              lon: position.coords.longitude
+            };
+            setPoint("start", point, "Oma sijainti");
+            state.map.setView([point.lat, point.lon], 15);
+            setStatus("Lähtö asetettu omaan sijaintiin.");
+          },
+          () => {
+            setBusy(false);
+            showToast("Sijaintia ei saatu. Tarkista selaimen sijaintilupa.");
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 15000
+          }
+        );
+      }
+
+      async function calculateRoute() {
+        try {
+          stopFollow();
+          setBusy(true, "Haen pisteitä...");
+          state.lastRouteRequest = Date.now();
+
+          const start = await resolvePoint("start");
+          const end = await resolvePoint("end");
+
+          if (!inBounds(start) || !inBounds(end)) {
+            throw new Error("Ensiversio toimii pääkaupunkiseudulla. Valitse pisteet Helsingin, Espoon, Vantaan tai lähialueen sisältä.");
+          }
+
+          setPoint("start", start, pointLabel("Lähtö", start));
+          setPoint("end", end, pointLabel("Maali", end));
+
+          const bbox = buildBoundingBox(start, end, Number(els.paddingKm.value));
+          setBusy(true, "Haen tie- ja väyläaineistoa...");
+          const elements = await fetchOverpass(bbox);
+
+          setBusy(true, "Lasken nopeinta reittiä...");
+          const pathSpeed = Number(els.pathSpeed.value);
+          const combinedGraph = buildGraph(elements, { includeMopedPaths: true, pathSpeed });
+          const combinedSnaps = connectRoutePoints(combinedGraph, start, end);
+          const combinedRoute = shortestPath(combinedGraph, "start", "end");
+
+          if (!combinedRoute) {
+            throw new Error("Reittiä ei löytynyt tällä hakualueella. Nosta hakualueen arvoa tai valitse pisteet lähempää tieverkkoa.");
+          }
+
+          const roadGraph = buildGraph(elements, { includeMopedPaths: false, pathSpeed });
+          let roadRoute = null;
+          try {
+            connectRoutePoints(roadGraph, start, end);
+            roadRoute = shortestPath(roadGraph, "start", "end");
+          } catch (error) {
+            roadRoute = null;
+          }
+
+          state.route = combinedRoute;
+          state.route.snaps = combinedSnaps;
+          state.route.roadOnly = roadRoute;
+          state.instructions = buildInstructions(combinedRoute.edges);
+          renderRoute(combinedRoute, roadRoute);
+          setBusy(false, "Reitti valmis.");
+          els.followButton.disabled = false;
+        } catch (error) {
+          setBusy(false);
+          showToast(error.message || "Reitin laskenta epäonnistui.");
+          setStatus(error.message || "Reitin laskenta epäonnistui.");
+        }
+      }
+
+      async function resolvePoint(kind) {
+        const stored = state.points[kind];
+        const input = kind === "start" ? els.startInput : els.endInput;
+        const value = input.value.trim();
+
+        if (stored && value) {
+          return stored;
+        }
+
+        const parsed = parseCoordinates(value);
+        if (parsed) {
+          return parsed;
+        }
+
+        if (!value) {
+          throw new Error(kind === "start" ? "Lisää lähtö." : "Lisää määränpää.");
+        }
+
+        return geocode(value);
+      }
+
+      function parseCoordinates(value) {
+        const match = value.match(/(-?\d+(?:[.,]\d+)?)\s*[, ]\s*(-?\d+(?:[.,]\d+)?)/);
+        if (!match) {
+          return null;
+        }
+
+        const lat = Number(match[1].replace(",", "."));
+        const lon = Number(match[2].replace(",", "."));
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          return null;
+        }
+        return { lat, lon };
+      }
+
+      async function geocode(query) {
+        const key = query.trim().toLowerCase();
+        if (state.geocodeCache[key]) {
+          return state.geocodeCache[key];
+        }
+
+        const url = new URL("https://nominatim.openstreetmap.org/search");
+        url.searchParams.set("format", "jsonv2");
+        url.searchParams.set("limit", "1");
+        url.searchParams.set("countrycodes", "fi");
+        url.searchParams.set("accept-language", "fi");
+        url.searchParams.set("viewbox", `${PKS_BOUNDS.west},${PKS_BOUNDS.north},${PKS_BOUNDS.east},${PKS_BOUNDS.south}`);
+        url.searchParams.set("bounded", "1");
+        url.searchParams.set("q", query);
+
+        const response = await fetch(url.toString(), {
+          headers: { Accept: "application/json" }
+        });
+        if (!response.ok) {
+          throw new Error("Osoitehaku ei vastannut.");
+        }
+
+        const results = await response.json();
+        if (!results.length) {
+          throw new Error(`Osoitetta ei löytynyt: ${query}`);
+        }
+
+        const point = {
+          lat: Number(results[0].lat),
+          lon: Number(results[0].lon)
+        };
+        rememberGeocode(key, point);
+        return point;
+      }
+
+      function rememberGeocode(key, point) {
+        const entries = Object.entries(state.geocodeCache).slice(-50);
+        state.geocodeCache = Object.fromEntries(entries);
+        state.geocodeCache[key] = point;
+        localStorage.setItem("moporeitti.geocode", JSON.stringify(state.geocodeCache));
+      }
+
+      async function fetchOverpass(bbox) {
+        const query = `
+          [out:json][timeout:45];
+          (
+            way["highway"~"^(${ROAD_QUERY_PATTERN})$"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+            way["highway"~"^(${MOPED_PATH_QUERY_PATTERN})$"]["moped"~"^(yes|designated|permissive|official)"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+            way["highway"~"^(${MOPED_PATH_QUERY_PATTERN})$"]["moped:conditional"~"^(yes|designated|permissive|official)"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+            way["highway"~"^(${MOPED_PATH_QUERY_PATTERN})$"]["mofa"~"^(yes|designated|permissive|official)"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+            way["highway"~"^(${MOPED_PATH_QUERY_PATTERN})$"]["mofa:conditional"~"^(yes|designated|permissive|official)"](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+          );
+          out body;
+          >;
+          out skel qt;
+        `;
+
+        const selected = els.overpassEndpoint.value;
+        const endpoints = [
+          selected,
+          "https://overpass-api.de/api/interpreter",
+          "https://overpass.private.coffee/api/interpreter"
+        ].filter((value, index, array) => array.indexOf(value) === index);
+
+        let lastError = null;
+        for (const endpoint of endpoints) {
+          const controller = new AbortController();
+          const timer = window.setTimeout(() => controller.abort(), 26000);
+          try {
+            const response = await fetch(endpoint, {
+              method: "POST",
+              signal: controller.signal,
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                Accept: "application/json"
+              },
+              body: new URLSearchParams({ data: query })
+            });
+            window.clearTimeout(timer);
+
+            if (!response.ok) {
+              throw new Error(`Overpass ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data.remark && /error/i.test(data.remark)) {
+              throw new Error(data.remark);
+            }
+            return data.elements || [];
+          } catch (error) {
+            window.clearTimeout(timer);
+            lastError = error;
+          }
+        }
+
+        throw new Error(`Kartta-aineistoa ei saatu. ${lastError ? lastError.message : ""}`.trim());
+      }
+
+      function buildGraph(elements, options) {
+        const osmNodes = new Map();
+        const ways = [];
+
+        for (const element of elements) {
+          if (element.type === "node") {
+            osmNodes.set(String(element.id), { lat: element.lat, lon: element.lon });
+          } else if (element.type === "way" && element.tags && element.nodes) {
+            ways.push(element);
+          }
+        }
+
+        const graph = {
+          nodes: new Map(),
+          adj: new Map(),
+          baseSegments: [],
+          stats: {
+            allowedWays: 0,
+            rejectedWays: 0
+          }
+        };
+
+        for (const way of ways) {
+          const access = classifyWay(way.tags, options);
+          if (!access.allowed) {
+            graph.stats.rejectedWays += 1;
+            continue;
+          }
+
+          graph.stats.allowedWays += 1;
+          for (let i = 0; i < way.nodes.length - 1; i += 1) {
+            const from = String(way.nodes[i]);
+            const to = String(way.nodes[i + 1]);
+            const a = osmNodes.get(from);
+            const b = osmNodes.get(to);
+            if (!a || !b) {
+              continue;
+            }
+
+            const distance = haversine(a, b);
+            if (distance < 0.8) {
+              continue;
+            }
+
+            ensureGraphNode(graph, from, a);
+            ensureGraphNode(graph, to, b);
+
+            const cost = distance / metersPerSecond(access.speedKmh);
+            const segment = {
+              id: `${way.id}:${i}`,
+              wayId: way.id,
+              from,
+              to,
+              a,
+              b,
+              distance,
+              cost,
+              type: access.type,
+              speedKmh: access.speedKmh,
+              speedLimit: access.speedLimit,
+              estimatedSpeed: access.estimatedSpeed,
+              name: way.tags.name || way.tags.ref || "",
+              highway: way.tags.highway,
+              forward: access.forward,
+              reverse: access.reverse
+            };
+
+            graph.baseSegments.push(segment);
+
+            if (access.forward) {
+              addEdge(graph, from, to, {
+                ...segment,
+                from,
+                to,
+                coords: [a, b]
+              });
+            }
+
+            if (access.reverse) {
+              addEdge(graph, to, from, {
+                ...segment,
+                from: to,
+                to: from,
+                coords: [b, a]
+              });
+            }
+          }
+        }
+
+        return graph;
+      }
+
+      function classifyWay(tags, options) {
+        const highway = tags.highway;
+        if (!highway || highway === "construction" || highway === "proposed") {
+          return { allowed: false };
+        }
+
+        const direction = directionFor(tags);
+
+        if (PATH_TYPES.has(highway)) {
+          if (!options.includeMopedPaths || !hasMopedPermission(tags)) {
+            return { allowed: false };
+          }
+
+          return {
+            allowed: true,
+            type: "path",
+            speedKmh: options.pathSpeed,
+            speedLimit: options.pathSpeed,
+            estimatedSpeed: true,
+            forward: direction.forward,
+            reverse: direction.reverse
+          };
+        }
+
+        if (!ROAD_TYPES.has(highway)) {
+          return { allowed: false };
+        }
+
+        if (highway === "motorway" || highway === "motorway_link" || tags.motorroad === "yes") {
+          return { allowed: false };
+        }
+
+        if (hasBlockedMopedAccess(tags)) {
+          return { allowed: false };
+        }
+
+        const explicitSpeed = parseMaxspeed(tags["maxspeed:moped"]) ?? parseMaxspeed(tags.maxspeed);
+        const sourceSpeed = parseMaxspeed(tags["source:maxspeed"]) ?? parseMaxspeed(tags["maxspeed:type"]);
+        const fallbackSpeed = FALLBACK_SPEEDS[highway] || 40;
+        const speedLimit = explicitSpeed ?? sourceSpeed ?? fallbackSpeed;
+
+        if (speedLimit > 60) {
+          return { allowed: false };
+        }
+
+        return {
+          allowed: true,
+          type: "road",
+          speedKmh: Math.max(5, Math.min(45, speedLimit)),
+          speedLimit,
+          estimatedSpeed: explicitSpeed === null && sourceSpeed === null,
+          forward: direction.forward,
+          reverse: direction.reverse
+        };
+      }
+
+      function hasMopedPermission(tags) {
+        const values = [
+          tags.moped,
+          tags["moped:conditional"],
+          tags.mofa,
+          tags["mofa:conditional"]
+        ].map(normalizeTagValue);
+
+        return values.some((value) => {
+          if (!value) {
+            return false;
+          }
+          return [...MOPED_YES].some((allowed) => value === allowed || value.startsWith(`${allowed} @`));
+        });
+      }
+
+      function hasBlockedMopedAccess(tags) {
+        const moped = normalizeTagValue(tags.moped);
+        if (MOPED_YES.has(moped)) {
+          return false;
+        }
+        if (ACCESS_NO.has(moped)) {
+          return true;
+        }
+
+        const accessValues = [
+          tags.access,
+          tags.vehicle,
+          tags.motor_vehicle,
+          tags.motorcycle
+        ].map(normalizeTagValue);
+
+        return accessValues.some((value) => ACCESS_NO.has(value));
+      }
+
+      function directionFor(tags) {
+        const raw = normalizeTagValue(tags["oneway:moped"] || tags.oneway);
+        if (raw === "-1" || raw === "reverse") {
+          return { forward: false, reverse: true };
+        }
+        if (raw === "yes" || raw === "1" || raw === "true" || tags.junction === "roundabout") {
+          return { forward: true, reverse: false };
+        }
+        return { forward: true, reverse: true };
+      }
+
+      function parseMaxspeed(value) {
+        if (!value) {
+          return null;
+        }
+
+        const normalized = String(value).trim().toLowerCase();
+        const implicit = {
+          "fi:urban": 50,
+          "fi:rural": 80,
+          "fi:motorway": 120,
+          "fi:living_street": 20,
+          walk: 8
+        };
+        if (Object.prototype.hasOwnProperty.call(implicit, normalized)) {
+          return implicit[normalized];
+        }
+
+        const match = normalized.match(/(\d+(?:[.,]\d+)?)/);
+        if (!match) {
+          return null;
+        }
+
+        const speed = Number(match[1].replace(",", "."));
+        if (!Number.isFinite(speed)) {
+          return null;
+        }
+
+        return normalized.includes("mph") ? speed * 1.609344 : speed;
+      }
+
+      function connectRoutePoints(graph, start, end) {
+        const startSnap = addVirtualPoint(graph, "start", start);
+        const endSnap = addVirtualPoint(graph, "end", end);
+
+        if (startSnap.segment.id === endSnap.segment.id) {
+          addSameSegmentShortcut(graph, startSnap, endSnap);
+        }
+
+        return { start: startSnap, end: endSnap };
+      }
+
+      function addVirtualPoint(graph, id, point) {
+        if (!graph.baseSegments.length) {
+          throw new Error("Mopoille sallittuja osuuksia ei löytynyt tältä alueelta.");
+        }
+
+        let best = null;
+        for (const segment of graph.baseSegments) {
+          const projection = projectPointToSegment(point, segment.a, segment.b);
+          if (!best || projection.distanceToPoint < best.distanceToPoint) {
+            best = {
+              ...projection,
+              segment
+            };
+          }
+        }
+
+        if (!best || best.distanceToPoint > 700) {
+          throw new Error("Lähtö tai määränpää on liian kaukana mopoille sallitusta verkosta.");
+        }
+
+        const snapPoint = { lat: best.lat, lon: best.lon };
+        ensureGraphNode(graph, id, snapPoint);
+        const distanceFrom = best.segment.distance * best.t;
+        const distanceTo = best.segment.distance * (1 - best.t);
+
+        if (best.segment.forward) {
+          addEdge(graph, id, best.segment.to, edgeFromPartial(best.segment, id, best.segment.to, snapPoint, best.segment.b, distanceTo));
+          addEdge(graph, best.segment.from, id, edgeFromPartial(best.segment, best.segment.from, id, best.segment.a, snapPoint, distanceFrom));
+        }
+
+        if (best.segment.reverse) {
+          addEdge(graph, id, best.segment.from, edgeFromPartial(best.segment, id, best.segment.from, snapPoint, best.segment.a, distanceFrom));
+          addEdge(graph, best.segment.to, id, edgeFromPartial(best.segment, best.segment.to, id, best.segment.b, snapPoint, distanceTo));
+        }
+
+        return {
+          id,
+          point: snapPoint,
+          originalPoint: point,
+          distanceToNetwork: best.distanceToPoint,
+          segment: best.segment,
+          t: best.t
+        };
+      }
+
+      function addSameSegmentShortcut(graph, startSnap, endSnap) {
+        const segment = startSnap.segment;
+        const startPoint = startSnap.point;
+        const endPoint = endSnap.point;
+        const along = Math.abs(endSnap.t - startSnap.t) * segment.distance;
+
+        if (segment.forward && startSnap.t <= endSnap.t) {
+          addEdge(graph, "start", "end", edgeFromPartial(segment, "start", "end", startPoint, endPoint, along));
+        }
+
+        if (segment.reverse && startSnap.t >= endSnap.t) {
+          addEdge(graph, "start", "end", edgeFromPartial(segment, "start", "end", startPoint, endPoint, along));
+        }
+      }
+
+      function edgeFromPartial(segment, from, to, a, b, distance) {
+        return {
+          ...segment,
+          from,
+          to,
+          distance,
+          cost: distance / metersPerSecond(segment.speedKmh),
+          coords: [a, b]
+        };
+      }
+
+      function shortestPath(graph, startId, endId) {
+        const dist = new Map();
+        const previous = new Map();
+        const heap = new MinHeap();
+
+        dist.set(startId, 0);
+        heap.push({ id: startId, cost: 0 });
+
+        while (heap.size()) {
+          const current = heap.pop();
+          if (current.cost !== dist.get(current.id)) {
+            continue;
+          }
+          if (current.id === endId) {
+            break;
+          }
+
+          for (const edge of graph.adj.get(current.id) || []) {
+            const nextCost = current.cost + edge.cost;
+            if (nextCost < (dist.get(edge.to) ?? Infinity)) {
+              dist.set(edge.to, nextCost);
+              previous.set(edge.to, { from: current.id, edge });
+              heap.push({ id: edge.to, cost: nextCost });
+            }
+          }
+        }
+
+        if (!previous.has(endId) && startId !== endId) {
+          return null;
+        }
+
+        const edges = [];
+        let cursor = endId;
+        while (cursor !== startId) {
+          const item = previous.get(cursor);
+          if (!item) {
+            return null;
+          }
+          edges.unshift(item.edge);
+          cursor = item.from;
+        }
+
+        return summarizeRoute(edges);
+      }
+
+      function summarizeRoute(edges) {
+        const route = {
+          edges,
+          distance: 0,
+          seconds: 0,
+          roadDistance: 0,
+          pathDistance: 0,
+          accessDistance: 0,
+          estimatedSpeedDistance: 0,
+          coordinates: [],
+          cumulative: []
+        };
+
+        let cumulativeDistance = 0;
+        let cumulativeSeconds = 0;
+
+        edges.forEach((edge, index) => {
+          route.distance += edge.distance;
+          route.seconds += edge.cost;
+          if (edge.type === "path") {
+            route.pathDistance += edge.distance;
+          } else if (edge.type === "road") {
+            route.roadDistance += edge.distance;
+          } else {
+            route.accessDistance += edge.distance;
+          }
+
+          if (edge.estimatedSpeed) {
+            route.estimatedSpeedDistance += edge.distance;
+          }
+
+          if (index === 0) {
+            route.coordinates.push(edge.coords[0]);
+          }
+          route.coordinates.push(edge.coords[1]);
+
+          route.cumulative.push({
+            edge,
+            startDistance: cumulativeDistance,
+            endDistance: cumulativeDistance + edge.distance,
+            startSeconds: cumulativeSeconds,
+            endSeconds: cumulativeSeconds + edge.cost
+          });
+
+          cumulativeDistance += edge.distance;
+          cumulativeSeconds += edge.cost;
+        });
+
+        return route;
+      }
+
+      function renderRoute(route, roadRoute) {
+        state.routeLayer.clearLayers();
+
+        const casing = L.layerGroup().addTo(state.routeLayer);
+        const colored = L.layerGroup().addTo(state.routeLayer);
+
+        for (const edge of route.edges) {
+          const latlngs = edge.coords.map((coord) => [coord.lat, coord.lon]);
+          L.polyline(latlngs, {
+            color: "#ffffff",
+            weight: edge.type === "path" ? 10 : 9,
+            opacity: 0.9,
+            lineCap: "round",
+            lineJoin: "round"
+          }).addTo(casing);
+
+          L.polyline(latlngs, {
+            color: edge.type === "path" ? "#059669" : "#2563eb",
+            weight: edge.type === "path" ? 6 : 5,
+            opacity: 0.95,
+            lineCap: "round",
+            lineJoin: "round"
+          }).addTo(colored);
+        }
+
+        if (route.coordinates.length > 1) {
+          const bounds = L.latLngBounds(route.coordinates.map((coord) => [coord.lat, coord.lon]));
+          state.map.fitBounds(bounds, { paddingTopLeft: [18, 205], paddingBottomRight: [18, 260] });
+        }
+
+        els.timeMetric.textContent = formatDuration(route.seconds);
+        els.distanceMetric.textContent = formatDistance(route.distance);
+        els.roadMetric.textContent = formatDistance(route.roadDistance);
+        els.pathMetric.textContent = formatDistance(route.pathDistance);
+        els.savingMetric.textContent = savingText(route, roadRoute);
+
+        const warning = buildWarning(route, roadRoute);
+        els.warningBox.hidden = !warning;
+        els.warningBox.textContent = warning;
+
+        renderInstructions(state.instructions);
+        els.routeSheet.classList.add("visible");
+        document.body.classList.add("has-route");
+        renderIcons();
+      }
+
+      function buildWarning(route, roadRoute) {
+        const warnings = [];
+        if (route.estimatedSpeedDistance > 250) {
+          warnings.push(`${formatDistance(route.estimatedSpeedDistance)} reitistä käyttää arvioitua nopeusrajaa, koska OSM-tiedoissa ei ollut maxspeed-arvoa.`);
+        }
+        const maxSnap = Math.max(route.snaps?.start?.distanceToNetwork || 0, route.snaps?.end?.distanceToNetwork || 0);
+        if (maxSnap > 60) {
+          warnings.push(`Lähin reittiverkon kohta oli ${Math.round(maxSnap)} m päässä lähtö- tai maalipisteestä.`);
+        }
+        if (!roadRoute) {
+          warnings.push("Pelkkään tieverkkoon perustuva vertailureitti ei löytynyt samalla hakualueella.");
+        }
+        warnings.push("Tarkista liikennemerkit paikan päällä.");
+        return warnings.join(" ");
+      }
+
+      function savingText(route, roadRoute) {
+        if (!roadRoute) {
+          return "uusi";
+        }
+        const diff = roadRoute.seconds - route.seconds;
+        if (diff <= 20) {
+          return "0 min";
+        }
+        return formatDuration(diff);
+      }
+
+      function renderInstructions(instructions) {
+        els.instructions.innerHTML = instructions.map((step) => {
+          const cls = step.type === "path" ? "path" : step.finish ? "finish" : "";
+          const icon = step.finish ? "flag" : step.type === "path" ? "bike" : iconForTurn(step.turn);
+          return `
+            <li>
+              <span class="step-icon ${cls}"><i data-lucide="${icon}"></i></span>
+              <span class="step-text">
+                ${escapeHtml(step.text)}
+                <span class="step-sub">${escapeHtml(step.sub)}</span>
+              </span>
+              <span class="step-dist">${formatDistance(step.distance)}</span>
+            </li>
+          `;
+        }).join("");
+      }
+
+      function buildInstructions(edges) {
+        if (!edges.length) {
+          return [];
+        }
+
+        const groups = [];
+        for (const edge of edges) {
+          const label = edge.name || (edge.type === "path" ? "mopoille sallittu väylä" : roadTypeName(edge.highway));
+          const last = groups[groups.length - 1];
+          if (last && last.label === label && last.type === edge.type) {
+            last.edges.push(edge);
+            last.distance += edge.distance;
+          } else {
+            groups.push({
+              label,
+              type: edge.type,
+              edges: [edge],
+              distance: edge.distance
+            });
+          }
+        }
+
+        const instructions = [];
+        groups.forEach((group, index) => {
+          const prev = groups[index - 1];
+          const turn = index === 0 ? "start" : turnBetween(prev, group);
+          let text;
+          if (index === 0) {
+            text = group.type === "path" ? "Lähde mopoille sallitulle väylälle" : "Lähde reitille";
+          } else if (group.type === "path" && prev.type !== "path") {
+            text = "Siirry mopoille sallitulle väylälle";
+          } else if (group.type !== "path" && prev.type === "path") {
+            text = "Palaa ajoradalle";
+          } else if (turn === "left") {
+            text = "Käänny vasemmalle";
+          } else if (turn === "right") {
+            text = "Käänny oikealle";
+          } else if (turn === "around") {
+            text = "Tee U-käännös";
+          } else {
+            text = "Jatka";
+          }
+
+          instructions.push({
+            text,
+            sub: group.label,
+            distance: group.distance,
+            type: group.type,
+            turn
+          });
+        });
+
+        instructions.push({
+          text: "Saavut määränpäähän",
+          sub: "Moporeitti päättyy",
+          distance: 0,
+          type: "finish",
+          finish: true,
+          turn: "finish"
+        });
+
+        let cumulative = 0;
+        for (const instruction of instructions) {
+          instruction.startDistance = cumulative;
+          cumulative += instruction.distance;
+          instruction.endDistance = cumulative;
+        }
+
+        return instructions;
+      }
+
+      function turnBetween(prevGroup, group) {
+        const prevEdge = prevGroup.edges[prevGroup.edges.length - 1];
+        const nextEdge = group.edges[0];
+        const prevBearing = bearing(prevEdge.coords[0], prevEdge.coords[1]);
+        const nextBearing = bearing(nextEdge.coords[0], nextEdge.coords[1]);
+        const delta = normalizeAngle(nextBearing - prevBearing);
+
+        if (Math.abs(delta) < 32) {
+          return "straight";
+        }
+        if (Math.abs(delta) > 145) {
+          return "around";
+        }
+        return delta > 0 ? "right" : "left";
+      }
+
+      function iconForTurn(turn) {
+        if (turn === "left") {
+          return "corner-up-left";
+        }
+        if (turn === "right") {
+          return "corner-up-right";
+        }
+        if (turn === "around") {
+          return "rotate-ccw";
+        }
+        if (turn === "start") {
+          return "circle-dot";
+        }
+        return "move-up";
+      }
+
+      function roadTypeName(highway) {
+        const names = {
+          living_street: "pihakatu",
+          service: "huoltotie",
+          residential: "asuntokatu",
+          tertiary: "kokoojakatu",
+          tertiary_link: "ramppi",
+          secondary: "pääkatu",
+          secondary_link: "ramppi",
+          primary: "pääkatu",
+          primary_link: "ramppi",
+          trunk: "päätie",
+          trunk_link: "ramppi",
+          unclassified: "tie",
+          road: "tie",
+          track: "tie"
+        };
+        return names[highway] || "tie";
+      }
+
+      function toggleFollow() {
+        if (state.watchId) {
+          stopFollow();
+        } else {
+          startFollow();
+        }
+      }
+
+      async function startFollow() {
+        if (!state.route) {
+          return;
+        }
+        if (!navigator.geolocation) {
+          showToast("Sijainti ei ole käytettävissä tällä selaimella.");
+          return;
+        }
+
+        try {
+          if ("wakeLock" in navigator) {
+            state.wakeLock = await navigator.wakeLock.request("screen");
+          }
+        } catch (error) {
+          state.wakeLock = null;
+        }
+
+        els.followButton.classList.add("warning");
+        els.followButton.querySelector("span").textContent = "Lopeta";
+        els.followBanner.classList.add("visible");
+
+        state.watchId = navigator.geolocation.watchPosition(
+          onPositionUpdate,
+          () => showToast("Sijaintia ei saatu. Tarkista sijaintilupa."),
+          {
+            enableHighAccuracy: true,
+            maximumAge: 3000,
+            timeout: 10000
+          }
+        );
+      }
+
+      function stopFollow() {
+        if (state.watchId) {
+          navigator.geolocation.clearWatch(state.watchId);
+          state.watchId = null;
+        }
+        if (state.wakeLock) {
+          state.wakeLock.release().catch(() => {});
+          state.wakeLock = null;
+        }
+        els.followButton.classList.remove("warning");
+        els.followButton.querySelector("span").textContent = "Seuraa";
+        els.followBanner.classList.remove("visible");
+      }
+
+      function onPositionUpdate(position) {
+        const point = {
+          lat: position.coords.latitude,
+          lon: position.coords.longitude
+        };
+
+        const icon = L.divIcon({
+          className: "",
+          html: '<div class="marker-pin user"></div>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 11]
+        });
+
+        if (state.markers.user) {
+          state.markers.user.setLatLng([point.lat, point.lon]);
+        } else {
+          state.markers.user = L.marker([point.lat, point.lon], { icon }).addTo(state.map);
+        }
+
+        const progress = routeProgress(point, state.route);
+        if (!progress) {
+          return;
+        }
+
+        const remainingDistance = Math.max(0, state.route.distance - progress.distance);
+        const remainingSeconds = Math.max(0, state.route.seconds - progress.seconds);
+        const next = nextInstruction(progress.distance);
+
+        els.nextStep.textContent = next ? next.text : "Jatka reittiä";
+        els.remainingStep.textContent = `${formatDistance(remainingDistance)} jäljellä, ${formatDuration(remainingSeconds)}`;
+        state.map.panTo([point.lat, point.lon], { animate: true, duration: 0.5 });
+      }
+
+      function routeProgress(point, route) {
+        let best = null;
+        for (const item of route.cumulative) {
+          const projection = projectPointToSegment(point, item.edge.coords[0], item.edge.coords[1]);
+          if (!best || projection.distanceToPoint < best.distanceToPoint) {
+            best = {
+              ...projection,
+              item
+            };
+          }
+        }
+        if (!best) {
+          return null;
+        }
+        return {
+          distance: best.item.startDistance + best.item.edge.distance * best.t,
+          seconds: best.item.startSeconds + best.item.edge.cost * best.t,
+          distanceToRoute: best.distanceToPoint
+        };
+      }
+
+      function nextInstruction(distance) {
+        return state.instructions.find((item) => item.endDistance > distance + 20 && !item.finish)
+          || state.instructions[state.instructions.length - 1];
+      }
+
+      function swapPoints() {
+        const start = state.points.start;
+        const end = state.points.end;
+        const startText = els.startInput.value;
+        const endText = els.endInput.value;
+        state.points.start = end;
+        state.points.end = start;
+        els.startInput.value = endText;
+        els.endInput.value = startText;
+
+        if (state.markers.start) {
+          state.map.removeLayer(state.markers.start);
+          delete state.markers.start;
+        }
+        if (state.markers.end) {
+          state.map.removeLayer(state.markers.end);
+          delete state.markers.end;
+        }
+        if (state.points.start) {
+          updateMarker("start", state.points.start);
+        }
+        if (state.points.end) {
+          updateMarker("end", state.points.end);
+        }
+      }
+
+      function buildBoundingBox(start, end, paddingKm) {
+        const meanLat = (start.lat + end.lat) / 2;
+        const latPad = paddingKm / 111.32;
+        const lonPad = paddingKm / (111.32 * Math.cos(toRad(meanLat)));
+        const bbox = {
+          south: Math.max(PKS_BOUNDS.south, Math.min(start.lat, end.lat) - latPad),
+          west: Math.max(PKS_BOUNDS.west, Math.min(start.lon, end.lon) - lonPad),
+          north: Math.min(PKS_BOUNDS.north, Math.max(start.lat, end.lat) + latPad),
+          east: Math.min(PKS_BOUNDS.east, Math.max(start.lon, end.lon) + lonPad)
+        };
+
+        const areaKm2 = Math.max(0, bbox.north - bbox.south) * 111.32
+          * Math.max(0, bbox.east - bbox.west) * 111.32 * Math.cos(toRad(meanLat));
+
+        if (areaKm2 > 1150) {
+          throw new Error("Hakualue on liian suuri selainreititykselle. Pienennä hakualueen arvoa tai valitse lähempänä toisiaan olevat pisteet.");
+        }
+
+        return bbox;
+      }
+
+      function inBounds(point) {
+        return point.lat >= PKS_BOUNDS.south
+          && point.lat <= PKS_BOUNDS.north
+          && point.lon >= PKS_BOUNDS.west
+          && point.lon <= PKS_BOUNDS.east;
+      }
+
+      function ensureGraphNode(graph, id, point) {
+        if (!graph.nodes.has(id)) {
+          graph.nodes.set(id, point);
+        }
+        if (!graph.adj.has(id)) {
+          graph.adj.set(id, []);
+        }
+      }
+
+      function addEdge(graph, from, to, edge) {
+        if (!graph.adj.has(from)) {
+          graph.adj.set(from, []);
+        }
+        graph.adj.get(from).push(edge);
+      }
+
+      function projectPointToSegment(point, a, b) {
+        const originLat = point.lat;
+        const originLon = point.lon;
+        const ap = toLocalMeters(point, originLat, originLon);
+        const aa = toLocalMeters(a, originLat, originLon);
+        const bb = toLocalMeters(b, originLat, originLon);
+        const abx = bb.x - aa.x;
+        const aby = bb.y - aa.y;
+        const denom = abx * abx + aby * aby;
+        const rawT = denom === 0 ? 0 : ((ap.x - aa.x) * abx + (ap.y - aa.y) * aby) / denom;
+        const t = Math.max(0, Math.min(1, rawT));
+        const x = aa.x + abx * t;
+        const y = aa.y + aby * t;
+        const projected = fromLocalMeters({ x, y }, originLat, originLon);
+        return {
+          ...projected,
+          t,
+          distanceToPoint: Math.hypot(ap.x - x, ap.y - y)
+        };
+      }
+
+      function toLocalMeters(point, originLat, originLon) {
+        const metersPerDegree = 111320;
+        return {
+          x: (point.lon - originLon) * metersPerDegree * Math.cos(toRad(originLat)),
+          y: (point.lat - originLat) * metersPerDegree
+        };
+      }
+
+      function fromLocalMeters(point, originLat, originLon) {
+        const metersPerDegree = 111320;
+        return {
+          lat: originLat + point.y / metersPerDegree,
+          lon: originLon + point.x / (metersPerDegree * Math.cos(toRad(originLat)))
+        };
+      }
+
+      function haversine(a, b) {
+        const earth = 6371000;
+        const dLat = toRad(b.lat - a.lat);
+        const dLon = toRad(b.lon - a.lon);
+        const lat1 = toRad(a.lat);
+        const lat2 = toRad(b.lat);
+        const sinDLat = Math.sin(dLat / 2);
+        const sinDLon = Math.sin(dLon / 2);
+        const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+        return 2 * earth * Math.asin(Math.min(1, Math.sqrt(h)));
+      }
+
+      function bearing(a, b) {
+        const lat1 = toRad(a.lat);
+        const lat2 = toRad(b.lat);
+        const dLon = toRad(b.lon - a.lon);
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        return (toDeg(Math.atan2(y, x)) + 360) % 360;
+      }
+
+      function normalizeAngle(angle) {
+        return ((angle + 540) % 360) - 180;
+      }
+
+      function metersPerSecond(kmh) {
+        return kmh / 3.6;
+      }
+
+      function toRad(degrees) {
+        return degrees * Math.PI / 180;
+      }
+
+      function toDeg(radians) {
+        return radians * 180 / Math.PI;
+      }
+
+      function formatDistance(meters) {
+        if (!Number.isFinite(meters)) {
+          return "--";
+        }
+        if (meters < 950) {
+          return `${Math.round(meters)} m`;
+        }
+        return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0).replace(".", ",")} km`;
+      }
+
+      function formatDuration(seconds) {
+        if (!Number.isFinite(seconds)) {
+          return "--";
+        }
+        const minutes = Math.max(1, Math.round(seconds / 60));
+        if (minutes < 60) {
+          return `${minutes} min`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const rest = minutes % 60;
+        return rest ? `${hours} h ${rest} min` : `${hours} h`;
+      }
+
+      function pointLabel(label, point) {
+        return `${label}`;
+      }
+
+      function normalizeTagValue(value) {
+        return value == null ? "" : String(value).trim().toLowerCase();
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function updateSettingLabels() {
+        els.pathSpeedValue.textContent = `${els.pathSpeed.value} km/h`;
+        els.paddingValue.textContent = `${els.paddingKm.value} km`;
+      }
+
+      function setBusy(isBusy, message = "") {
+        els.routeButton.disabled = isBusy;
+        els.locateStart.disabled = isBusy;
+        if (message) {
+          setStatus(message);
+        }
+      }
+
+      function setStatus(message) {
+        els.status.textContent = message;
+      }
+
+      function showToast(message) {
+        window.clearTimeout(state.toastTimer);
+        els.toast.textContent = message;
+        els.toast.classList.add("visible");
+        state.toastTimer = window.setTimeout(() => {
+          els.toast.classList.remove("visible");
+        }, 4200);
+      }
+
+      function loadJson(key, fallback) {
+        try {
+          return JSON.parse(localStorage.getItem(key)) || fallback;
+        } catch (error) {
+          return fallback;
+        }
+      }
+
+      class MinHeap {
+        constructor() {
+          this.items = [];
+        }
+
+        size() {
+          return this.items.length;
+        }
+
+        push(item) {
+          this.items.push(item);
+          this.bubbleUp(this.items.length - 1);
+        }
+
+        pop() {
+          if (this.items.length === 1) {
+            return this.items.pop();
+          }
+          const root = this.items[0];
+          this.items[0] = this.items.pop();
+          this.bubbleDown(0);
+          return root;
+        }
+
+        bubbleUp(index) {
+          while (index > 0) {
+            const parent = Math.floor((index - 1) / 2);
+            if (this.items[parent].cost <= this.items[index].cost) {
+              break;
+            }
+            [this.items[parent], this.items[index]] = [this.items[index], this.items[parent]];
+            index = parent;
+          }
+        }
+
+        bubbleDown(index) {
+          const length = this.items.length;
+          while (true) {
+            const left = index * 2 + 1;
+            const right = index * 2 + 2;
+            let smallest = index;
+
+            if (left < length && this.items[left].cost < this.items[smallest].cost) {
+              smallest = left;
+            }
+            if (right < length && this.items[right].cost < this.items[smallest].cost) {
+              smallest = right;
+            }
+            if (smallest === index) {
+              break;
+            }
+            [this.items[smallest], this.items[index]] = [this.items[index], this.items[smallest]];
+            index = smallest;
+          }
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
