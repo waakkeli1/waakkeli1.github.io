@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>MopoNavi — mopojen ja skoottereiden navigaattori</title>
+<meta name="description" content="Navigaattori mopoille: reitittää sekä ajotiet (≤60 km/h) että Sallittu mopoille -väylät. Nopeudet katkaistu 45 km/h:iin.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MopoNavi">
+<meta name="theme-color" content="#17181c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=Saira:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --bg:#17181c; --panel:#1f2127; --panel-2:#26282f;
+    --ink:#f2f3f5; --muted:#9aa0a8; --line:#33363e;
+    --kilpi:#ffc72c;            /* lisäkilven keltainen */
+    --road:#4ea8de;             /* ajotie-osuudet kartalla */
+    --danger:#ff5c5c; --ok:#63d471;
+    --radius:14px;
+    --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:'Saira',system-ui,-apple-system,sans-serif;
+    background:var(--bg); color:var(--ink);
+    height:100dvh; overflow:hidden;
+    touch-action:manipulation;
+  }
+  #map{position:absolute; inset:0; z-index:0; background:#dfe6dd}
+
+  /* ---------- yläpaneeli: haku ---------- */
+  .top{
+    position:absolute; z-index:500; left:10px; right:10px; top:calc(var(--sat) + 8px);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:8px 12px;
+    box-shadow:0 4px 18px rgba(0,0,0,.35);
+  }
+  .badge45{
+    width:38px;height:38px;border-radius:50%;
+    background:#fff;border:5px solid #d0342c;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Saira Condensed';font-weight:700;font-size:17px;color:#111;
+    flex:0 0 auto;
+  }
+  .brand h1{
+    font-family:'Saira Condensed'; font-weight:700; font-size:22px;
+    letter-spacing:.04em; margin:0; text-transform:uppercase;
+  }
+  .brand h1 span{color:var(--kilpi)}
+  .brand small{display:block;color:var(--muted);font-family:'Saira';font-weight:400;font-size:11px;letter-spacing:0;text-transform:none}
+  .brand .spacer{flex:1}
+  .iconbtn{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+    border-radius:10px;padding:7px 10px;font-size:15px;line-height:1;cursor:pointer
+  }
+  .search{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:10px;
+    box-shadow:0 4px 18px rgba(0,0,0,.35);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .field{position:relative}
+  .field input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--ink); border-radius:10px; padding:11px 40px 11px 34px;
+    font:inherit; font-size:16px; outline:none;
+  }
+  .field input:focus{border-color:var(--kilpi)}
+  .field .dot{
+    position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    width:10px;height:10px;border-radius:50%;
+  }
+  .dot.a{background:var(--ok)} .dot.b{background:var(--danger)}
+  .field .locbtn{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    background:none;border:0;color:var(--kilpi);font-size:18px;padding:6px;cursor:pointer;
+  }
+  .suggest{
+    position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:600;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    max-height:210px; overflow:auto; display:none;
+  }
+  .suggest button{
+    display:block;width:100%;text-align:left;background:none;border:0;
+    color:var(--ink);padding:10px 12px;font:inherit;font-size:14px;cursor:pointer;
+    border-bottom:1px solid var(--line);
+  }
+  .suggest button small{display:block;color:var(--muted);font-size:12px}
+  .suggest button:last-child{border-bottom:0}
+  .go{
+    background:var(--kilpi); color:#181818; border:0; border-radius:10px;
+    font-family:'Saira Condensed'; font-weight:700; font-size:18px;
+    letter-spacing:.06em; text-transform:uppercase; padding:12px; cursor:pointer;
+  }
+  .go:disabled{opacity:.5}
+
+  /* ---------- alapaneeli: reitin yhteenveto ---------- */
+  .sheet{
+    position:absolute; z-index:500; left:10px; right:10px;
+    bottom:calc(var(--sab) + 10px);
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); box-shadow:0 -4px 24px rgba(0,0,0,.4);
+    display:none; max-height:46dvh; overflow:hidden auto;
+  }
+  .sheet.open{display:block}
+  .sheet .grab{width:42px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 2px}
+  .sum{display:flex; align-items:baseline; gap:14px; padding:8px 14px 4px}
+  .sum .time{font-family:'Saira Condensed';font-weight:700;font-size:34px;color:var(--kilpi)}
+  .sum .dist{font-size:16px;color:var(--ink)}
+  .sum .via{font-size:12px;color:var(--muted);margin-left:auto;text-align:right}
+  .legend{display:flex;gap:16px;padding:2px 14px 8px;font-size:12px;color:var(--muted);align-items:center}
+  .legend i{display:inline-block;width:26px;height:0;border-top:4px solid var(--road);border-radius:2px;margin-right:6px;vertical-align:middle}
+  .legend i.moped{border-top:4px dashed var(--kilpi)}
+  .sheet .actions{display:flex; gap:8px; padding:0 14px 12px}
+  .sheet .actions .go{flex:1}
+  .btn2{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    border-radius:10px; font:inherit; font-size:14px; padding:12px 14px; cursor:pointer;
+  }
+  .steps{border-top:1px solid var(--line); padding:6px 0 8px; display:none}
+  .steps.open{display:block}
+  .step{display:flex;gap:10px;padding:8px 14px;font-size:14px;align-items:center}
+  .step .ic{width:26px;text-align:center;font-size:17px;flex:0 0 auto}
+  .step .d{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
+  .step.moped{border-left:3px solid var(--kilpi)}
+
+  /* ---------- navigointi-HUD ---------- */
+  .hud{
+    position:absolute; z-index:700; left:10px; right:10px; top:calc(var(--sat) + 8px);
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:0 4px 18px rgba(0,0,0,.4); display:none; overflow:hidden;
+  }
+  .hud.on{display:block}
+  .hud .next{display:flex;align-items:center;gap:12px;padding:12px 14px}
+  .hud .arrow{font-size:34px;line-height:1}
+  .hud .txt{font-family:'Saira Condensed';font-weight:600;font-size:20px;line-height:1.15}
+  .hud .txt small{display:block;font-family:'Saira';font-weight:400;font-size:13px;color:var(--muted)}
+  .hud .meta{
+    display:flex;justify-content:space-between;align-items:center;
+    background:var(--panel-2);border-top:1px solid var(--line);
+    padding:8px 14px;font-size:14px;
+  }
+  .hud .meta b{font-family:'Saira Condensed';font-size:18px;color:var(--kilpi)}
+  .hudbar{
+    position:absolute; z-index:700; left:10px; right:10px;
+    bottom:calc(var(--sab) + 10px); display:none; gap:8px;
+  }
+  .hudbar.on{display:flex}
+  .hudbar .btn2{flex:1}
+  .hudbar .stop{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+
+  /* ---------- ilmoitukset ---------- */
+  .toast{
+    position:absolute; z-index:900; left:50%; transform:translateX(-50%);
+    top:calc(var(--sat) + 8px);
+    background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+    padding:10px 16px; border-radius:12px; font-size:14px; display:none;
+    max-width:88vw; text-align:center; box-shadow:0 4px 18px rgba(0,0,0,.5);
+  }
+  .toast.err{border-color:var(--danger)}
+  .loading{
+    position:absolute; z-index:800; inset:0; display:none;
+    align-items:center; justify-content:center; flex-direction:column; gap:14px;
+    background:rgba(23,24,28,.55); backdrop-filter:blur(2px);
+  }
+  .loading.on{display:flex}
+  .wheel{
+    width:52px;height:52px;border-radius:50%;
+    border:6px solid var(--panel-2); border-top-color:var(--kilpi);
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading p{margin:0;font-size:14px;color:var(--ink);background:var(--panel);padding:8px 14px;border-radius:10px;border:1px solid var(--line)}
+
+  /* ---------- info-dialogi ---------- */
+  dialog{
+    border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--panel); color:var(--ink); max-width:min(480px,92vw);
+    padding:18px; font-size:14px; line-height:1.5;
+  }
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog h2{font-family:'Saira Condensed';margin:0 0 8px;font-size:20px;text-transform:uppercase;letter-spacing:.04em}
+  dialog h2 span{color:var(--kilpi)}
+  dialog p{margin:0 0 10px;color:var(--muted)}
+  dialog p b{color:var(--ink)}
+  dialog .close{width:100%}
+
+  .leaflet-control-attribution{font-size:9px}
+  @media (prefers-reduced-motion:reduce){ .wheel{animation-duration:2.5s} }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Haku -->
+<div class="top" id="topPanel">
+  <div class="brand">
+    <div class="badge45">45</div>
+    <h1>Mopo<span>Navi</span><small>tiet + sallittu mopoille -väylät</small></h1>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="infoBtn" aria-label="Tietoa sovelluksesta">ⓘ</button>
+  </div>
+  <div class="search">
+    <div class="field">
+      <span class="dot a"></span>
+      <input id="fromInput" type="text" placeholder="Lähtöpaikka" autocomplete="off" value="Oma sijainti">
+      <button class="locbtn" id="useLoc" title="Käytä omaa sijaintia">◎</button>
+      <div class="suggest" id="fromSug"></div>
+    </div>
+    <div class="field">
+      <span class="dot b"></span>
+      <input id="toInput" type="text" placeholder="Määränpää (osoite tai paikka)" autocomplete="off">
+      <div class="suggest" id="toSug"></div>
+    </div>
+    <button class="go" id="routeBtn">Hae reitti</button>
+  </div>
+</div>
+
+<!-- Reitin yhteenveto -->
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <div class="sum">
+    <div class="time" id="sumTime">–</div>
+    <div class="dist" id="sumDist">–</div>
+    <div class="via" id="sumVia"></div>
+  </div>
+  <div class="legend">
+    <span><i></i>Ajotie</span>
+    <span><i class="moped"></i>Sallittu mopoille -väylä</span>
+  </div>
+  <div class="actions">
+    <button class="go" id="navBtn">Aloita navigointi</button>
+    <button class="btn2" id="stepsBtn">Ohjeet</button>
+  </div>
+  <div class="steps" id="steps"></div>
+</div>
+
+<!-- Navigointi-HUD -->
+<div class="hud" id="hud">
+  <div class="next">
+    <div class="arrow" id="hudArrow">↑</div>
+    <div class="txt"><span id="hudText">Aja suoraan</span><small id="hudSub"></small></div>
+  </div>
+  <div class="meta">
+    <span id="hudLeft">– km</span>
+    <b id="hudEta">–</b>
+    <span id="hudSpeed">0 km/h</span>
+  </div>
+</div>
+<div class="hudbar" id="hudbar">
+  <button class="btn2" id="voiceBtn">🔇 Ääni</button>
+  <button class="btn2" id="centerBtn">Keskitä</button>
+  <button class="btn2 stop" id="stopBtn">Lopeta</button>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="loading" id="loading"><div class="wheel"></div><p id="loadingText">Haetaan…</p></div>
+
+<dialog id="infoDlg">
+  <h2>Mopo<span>Navi</span></h2>
+  <p>Reitittää mopon nopeimman reitin käyttäen sekä <b>ajoteitä</b> (ei moottoriteitä, vain rajoitus ≤ 60 km/h) että kävely-/pyöräteitä, joissa on <b>"Sallittu mopoille"</b>&nbsp;-lisäkilpi.</p>
+  <p>Aika-arvio olettaa enintään <b>45 km/h</b> ajoteillä ja n. 30 km/h mopoväylillä.</p>
+  <p>Tie- ja mopoväylätiedot: © OpenStreetMapin tekijät (moped=yes). Kattavuus vaihtelee alueittain — kaikki mopoväylät eivät välttämättä ole kartalla, ja jokin väylä voi olla merkitty väärin. <b>Noudata aina liikennemerkkejä ja -sääntöjä</b>; tämä sovellus on apuväline, ei liikenneohje.</p>
+  <p>Reititys lasketaan puhelimessasi. Pisin haettava reitti on n. 35 km linnuntietä.</p>
+  <button class="go close" id="infoClose">Selvä</button>
+</dialog>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
