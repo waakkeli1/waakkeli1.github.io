@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilitys-PDF → Excel</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --teksti:#23272E; --tausta:#E9ECEF; --pinta:#FFFFFF; --viiva:#D3D8DE; --vaimea:#5B636E;
+  --keltainen:#FFC72C; --ok:#1F7A4D; --ok-t:#E3F2EA; --virhe:#B42318; --virhe-t:#FCE9E7;
+  --huom:#8A5A00; --huom-t:#FFF4D6; --muokattu:#FFF1BF; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{--teksti:#E8EAED; --tausta:#16191D; --pinta:#1F2329; --viiva:#343A42; --vaimea:#9AA3AE;
+    --ok:#5CC48E; --ok-t:#173326; --virhe:#F28B7D; --virhe-t:#3A1C19; --huom:#F2C462; --huom-t:#3A2F14;
+    --muokattu:#4A3F12; color-scheme:dark}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--tausta);color:var(--teksti);font:16px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+main{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:1.9rem;margin:0 0 4px}
+h2{font-size:1.3rem;margin:0}
+.alaotsikko{color:var(--vaimea);margin:0 0 20px}
+.kyltti{display:block;background:var(--keltainen);color:#23272E;border-radius:40px 40px 10px 10px;padding:30px 24px;
+  text-align:center;cursor:pointer;border:3px solid transparent}
+.kyltti.yli{border:3px dashed #23272E}
+.kyltti:focus-visible{outline:3px solid var(--teksti);outline-offset:3px}
+.kyltti strong{display:block;font-size:1.6rem}
+.kyltti input{display:none}
+.yhdistetty{background:var(--pinta);border:1px solid var(--viiva);border-radius:8px;padding:14px 16px;margin:22px 0 14px}
+.yhdistetty .napit{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.yhdistetty span{color:var(--vaimea)}
+button{font:inherit;cursor:pointer;border-radius:7px}
+button:disabled{opacity:.4;cursor:not-allowed}
+.ensisijainen{background:var(--teksti);color:var(--tausta);border:0;padding:9px 16px;font-weight:600}
+.toissijainen{background:var(--pinta);border:1px solid var(--viiva);color:var(--teksti);padding:8px 14px}
+.pieni{background:none;border:1px solid var(--viiva);color:var(--vaimea);padding:3px 9px;font-size:.85rem}
+.ilmoitus{margin:10px 0 0;padding:7px 10px;border-radius:6px;font-size:.93rem}
+.ilmoitus:empty{display:none}
+.ilmoitus.ok{background:var(--ok-t);color:var(--ok)} .ilmoitus.virhe{background:var(--virhe-t);color:var(--virhe)}
+.kortti{background:var(--pinta);border:1px solid var(--viiva);border-left:6px solid var(--vaimea);border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.kortti.ok{border-left-color:var(--ok)} .kortti.virhe{border-left-color:var(--virhe)}
+.yla{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nimi{font-weight:600;word-break:break-all}
+.malli{color:var(--vaimea);font-size:.9rem}
+.rivi{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-top:12px}
+select,input[type=text]{font:inherit;padding:6px 9px;border:1px solid var(--viiva);border-radius:6px;background:var(--pinta);color:var(--teksti)}
+:focus-visible{outline:3px solid #E0A800;outline-offset:2px}
+.tila{margin-top:10px;padding:7px 10px;border-radius:6px;font-size:.93rem}
+.tila.ok{background:var(--ok-t);color:var(--ok)} .tila.virhe{background:var(--virhe-t);color:var(--virhe)} .tila.huom{background:var(--huom-t);color:var(--huom)}
+details{margin-top:8px} summary{cursor:pointer;color:var(--vaimea);font-size:.92rem}
+.taulu{overflow-x:auto;margin-top:6px}
+table{border-collapse:collapse;font-size:.86rem;font-variant-numeric:tabular-nums;width:100%}
+th,td{padding:4px 8px;border-bottom:1px solid var(--viiva);white-space:nowrap;text-align:left}
+th{color:var(--vaimea);font-weight:500} td.n,th.n{text-align:right}
+.tyhja{color:var(--vaimea);text-align:center;padding:16px 0}
+
+/* Yhdistetty taulukko */
+dialog{width:min(1200px,96vw);height:92vh;max-height:92vh;padding:0;border:1px solid var(--viiva);border-radius:10px;
+  background:var(--pinta);color:var(--teksti)}
+dialog[open]{display:flex;flex-direction:column}
+dialog::backdrop{background:rgba(20,22,26,.55)}
+.d-yla{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px 0}
+.d-yla span{color:var(--vaimea)}
+.d-toiminnot{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 18px}
+.d-toiminnot label{font-size:.93rem}
+.vihje{margin:0;padding:0 18px 10px;color:var(--vaimea);font-size:.88rem}
+.d-ilmoitus{padding:0 18px}
+.d-taulu{flex:1;overflow:auto;border-top:1px solid var(--viiva)}
+.d-taulu table{font-size:.88rem}
+.d-taulu thead th{position:sticky;top:0;background:var(--pinta);z-index:1;border-bottom:2px solid var(--viiva)}
+.d-taulu td[contenteditable]{cursor:text}
+.d-taulu td[contenteditable]:hover{background:var(--tausta)}
+.d-taulu td[contenteditable]:focus{outline:2px solid #E0A800;outline-offset:-2px;background:var(--pinta)}
+.d-taulu td.muokattu{background:var(--muokattu)}
+.d-taulu tr.poistettu td{color:var(--vaimea);text-decoration:line-through;background:none}
+.d-taulu td.nro{color:var(--vaimea)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Tilitys-PDF → Excel</h1>
+  <p class="alaotsikko">Tuo PDF:t, kopioi yhdistetyt rivit ja liitä ne pää-Exceliin. Tiedostot käsitellään vain tässä selaimessa, niitä ei lähetetä minnekään.</p>
+
+  <label class="kyltti" id="kyltti" tabindex="0">
+    <strong>Pudota PDF:t tähän</strong>
+    <span>tai valitse tiedostot napsauttamalla</span>
+    <input type="file" id="valitsin" accept=".pdf,application/pdf" multiple>
+  </label>
+
+  <section class="yhdistetty" aria-label="Yhdistetyt rivit">
+    <span id="yhteenveto">Ei tiedostoja</span>
+    <div class="napit">
+      <button class="ensisijainen" id="kopioi" disabled>Kopioi yhdistetyt rivit</button>
+      <button class="toissijainen" id="avaa" disabled>Näytä ja muokkaa taulukkoa</button>
+      <button class="toissijainen" id="lataa" disabled>Lataa yhdistetty Excel</button>
+    </div>
+    <p class="ilmoitus" id="ilmoitus" role="status"></p>
+  </section>
+
+  <section id="lista"><p class="tyhja">Lisätyt PDF:t näkyvät tässä.</p></section>
+</main>
+
+<dialog id="taulukko" aria-labelledby="t-otsikko">
+  <div class="d-yla">
+    <div><h2 id="t-otsikko">Yhdistetty taulukko</h2><span id="t-yhteenveto"></span></div>
+    <button class="toissijainen" id="t-sulje">Sulje</button>
+  </div>
+  <div class="d-toiminnot">
+    <button class="ensisijainen" id="t-kopioi">Kopioi rivit</button>
+    <label><input type="checkbox" id="t-otsikot"> Otsikkorivi mukaan</label>
+    <label>Excelin kieli
+      <select id="t-erotin">
+        <option value=",">Suomi (desimaalipilkku)</option>
+        <option value=".">Englanti (desimaalipiste)</option>
+      </select></label>
+    <button class="toissijainen" id="t-lataa">Lataa Excel</button>
+  </div>
+  <p class="vihje">Korjaa arvo napsauttamalla solua. Muutetut solut näkyvät keltaisina ja menevät mukaan kopioon ja Exceliin.
+    Vie hiiri rivin päälle nähdäksesi, mistä PDF:stä se on.</p>
+  <div class="d-ilmoitus"><p class="ilmoitus" id="t-ilmoitus" role="status"></p></div>
+  <div class="d-taulu"><table id="t-taulu"></table></div>
+</dialog>
+
+<script>
+/* =====================================================================
+   ASETUKSET – muokkaa näitä
+   ===================================================================== */
+
+// Lähdetyypit valikossa. "Muu" kysyy lisäksi lähteen nimen.
+const LAHDETYYPIT = ["Kela", "Kaupunkikortti", "Taksikortti", "Sovellus", "Laskutus", "Muu"];
+
+// Raporttimalli -> ehdotettu lähdetyyppi. BILL2 (uusi BILL-pohja) voidaan lisätä tähän, kun tiedetään mikä se on.
+const MALLIN_OLETUS = { KELA: "Kela", TILITETYT: "Kaupunkikortti", ERITTELY: "Taksikortti" };
+
+// Vanhoissa BILL-raporteissa lähdetyyppi päätellään As. nro -sarakkeesta
+const ASIAKASNUMEROT = { "APP": "Sovellus", "3052": "Kaupunkikortti", "202562": "Laskutus" };
+
+// Excelin ja kopion sarakkeet tässä järjestyksessä.
+// kentta: lahde, alku, loppu, auto, kuitti, brutto, netto, alv, alvPros
+// tyyppi: teksti, aika, raha, pros
+const SARAKKEET = [
+  { otsikko: "Lähde",        kentta: "lahde",   tyyppi: "teksti", leveys: 16 },
+  { otsikko: "Alku",         kentta: "alku",    tyyppi: "aika",   leveys: 16 },
+  { otsikko: "Loppu",        kentta: "loppu",   tyyppi: "aika",   leveys: 16 },
+  { otsikko: "Auto",         kentta: "auto",    tyyppi: "teksti", leveys: 8 },
+  { otsikko: "Kuittinumero", kentta: "kuitti",  tyyppi: "teksti", leveys: 13 },
+  { otsikko: "Brutto",       kentta: "brutto",  tyyppi: "raha",   leveys: 11 },
+  { otsikko: "Netto",        kentta: "netto",   tyyppi: "raha",   leveys: 11 },
+  { otsikko: "Alv",          kentta: "alv",     tyyppi: "raha",   leveys: 10 },
+  { otsikko: "Alv %",        kentta: "alvPros", tyyppi: "pros",   leveys: 8 },
+];
+
+/* =====================================================================
+   PDF:n lukeminen tekstiriveiksi
+   ===================================================================== */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+async function lueRivit(puskuri) {
+  const pdf = await pdfjsLib.getDocument({ data: puskuri }).promise;
+  const rivit = [];
+  for (let s = 1; s <= pdf.numPages; s++) {
+    const sisalto = await (await pdf.getPage(s)).getTextContent();
+    const palat = sisalto.items.filter(i => i.str && i.str.trim()).map(i => ({
+      s: i.str, x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || 8 }));
+    const linjat = [];
+    for (const p of palat) {
+      let l = linjat.find(l => Math.abs(l.y - p.y) <= Math.max(1.5, p.h * 0.35));
+      if (!l) { l = { y: p.y, palat: [] }; linjat.push(l); }
+      l.palat.push(p);
+    }
+    linjat.sort((a, b) => b.y - a.y);
+    for (const l of linjat) {
+      l.palat.sort((a, b) => a.x - b.x);
+      let t = "", loppu = null;
+      for (const p of l.palat) { if (loppu !== null && p.x - loppu > 0.8) t += " "; t += p.s; loppu = p.x + p.w; }
+      rivit.push(t.replace(/\s+/g, " ").trim());
+    }
+  }
+  return rivit.filter(Boolean);
+}
+
+/* =====================================================================
+   Apufunktiot
+   ===================================================================== */
+function luku(s) {
+  if (s == null) return null;
+  s = String(s).replace(/\u2212/g, "-").replace(/[€%\u00a0]|km/g, "").replace(/\s/g, "");
+  if (s === "") return null;
+  if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
+  else s = s.replace(",", ".");
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return NaN;
+  return parseFloat(s);
+}
+// "13.04.2026" tai "27/04/26", "09:40" -> Date (paikallinen aika)
+function aika(pvm, klo) {
+  const m = /^(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4})$/.exec((pvm || "").trim());
+  if (!m) return null;
+  const vuosi = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+  const [h, min] = (klo || "0:00").split(/[:.]/).map(Number);
+  return new Date(vuosi, +m[2] - 1, +m[1], h, min);
+}
+const summa = (rivit, k) => Math.round(rivit.reduce((a, r) => a + (r[k] || 0), 0) * 100) / 100;
+
+/* =====================================================================
+   Raporttimallit
+   ===================================================================== */
+function tunnista(teksti) {
+  const t = teksti.toLowerCase();
+  if (t.includes("kela-tapahtumista")) return "KELA";
+  if (t.includes("raportti tilitetyistä tapahtumista")) return "TILITETYT";
+  if (t.includes("tilityserittely")) return "ERITTELY";
+  if (t.includes("tilitysnumero:") && t.includes("varausnumero")) return "BILL";
+  if (t.includes("varausnumero") && t.includes("tilitysnumero") && t.includes("autonumero")) return "BILL2";
+  return "TUNTEMATON";
+}
+const MALLIEN_NIMET = { BILL: "BILL-tilitys", BILL2: "BILL-tilitys (uusi pohja)", TILITETYT: "Tilitetyt tapahtumat",
+  KELA: "Kela-tilitys", ERITTELY: "Tilityserittely", TUNTEMATON: "Tuntematon raporttimalli" };
+
+const EUR = "-?\\d{1,3}(?:[ \\u00a0]\\d{3})*,\\d{2}";
+
+// Vanha BILL: "Yrittäjä: … / Päiväys: … / Tilitysnumero: BILL/…", sarakkeena As. nro
+const BILL_RIVI = new RegExp(
+  "^(\\S+) (\\d{2}\\.\\d{2}\\.\\d{4}) (\\d{1,2}:\\d{2}) ?- ?(\\d{1,2}:\\d{2}) (\\S+) (\\S+) (\\S+) (\\S+) " +
+  `(${EUR}) ?€ ([\\d.,]+) (${EUR}) ?€ (${EUR}) ?€$`);
+
+function jasennaBill(rivit) {
+  const tulos = { rivit: [], loppusumma: null, asiakasnumerot: new Set() };
+  for (const t of rivit) {
+    let m = BILL_RIVI.exec(t);
+    if (m) {
+      const alku = aika(m[2], m[3]); let loppu = aika(m[2], m[4]);
+      if (loppu < alku) loppu = new Date(loppu.getTime() + 86400000);   // yli puolenyön
+      tulos.rivit.push({ alku, loppu, auto: m[7], kuitti: m[6], brutto: luku(m[9]),
+        alvPros: luku(m[10]), alv: luku(m[11]), netto: luku(m[12]), teksti: t });
+      tulos.asiakasnumerot.add(m[8]);
+      continue;
+    }
+    m = new RegExp(`^Kokonais (${EUR}) ?€`).exec(t);
+    if (m && tulos.loppusumma == null) tulos.loppusumma = luku(m[1]);
+  }
+  tulos.tiedot = (rivit.find(t => t.startsWith("Tilitysnumero:")) || "").replace("Tilitysnumero:", "nro").trim();
+  return tulos;
+}
+
+// Uusi BILL-pohja: "FI… TAXIES OY 28.05.2026", sarakkeet Varausnumero, Tapahtuma pvm, Km, Tilitysnumero,
+// Kuljettaja, Kuittinumero, Autonumero, Lisätieto, summat. Kellonajat ovat päivämäärän alla omilla riveillään.
+const BILL2_RIVI = new RegExp(
+  "^(\\S+) (\\d{1,2}/\\d{1,2}/\\d{2,4})(?: (\\d{1,2}:\\d{2}) ?-? ?(\\d{1,2}:\\d{2})?)?(?: (\\d{1,3}(?: \\d{3})*))? " +
+  `(\\S+/\\S+) (\\S+) (\\S+) (\\S+)(?: (.+?))? (${EUR}) ?€ ([\\d.,]+) (${EUR}) ?€ (${EUR}) ?€$`);
+const AIKARIVI = /^\d{1,2}:\d{2}(?: ?- ?(?:\d{1,2}:\d{2})?)?$|^- ?\d{1,2}:\d{2}$/;
+
+function jasennaBill2(rivit) {
+  const tulos = { rivit: [], loppusumma: null, tilitysnumerot: new Set() };
+  for (let i = 0; i < rivit.length; i++) {
+    const t = rivit[i];
+    const m = BILL2_RIVI.exec(t);
+    if (m) {
+      const ajat = [m[3], m[4]].filter(Boolean);
+      let j = i + 1;
+      while (ajat.length < 2 && j < rivit.length && AIKARIVI.test(rivit[j])) {
+        ajat.push(...rivit[j].match(/\d{1,2}:\d{2}/g)); j++;
+      }
+      i = j - 1;
+      const alku = aika(m[2], ajat[0]); let loppu = ajat[1] ? aika(m[2], ajat[1]) : null;
+      if (alku && loppu && loppu < alku) loppu = new Date(loppu.getTime() + 86400000);
+      tulos.rivit.push({ varaus: m[1], alku, loppu, km: m[5] ? luku(m[5]) : null, auto: m[9], kuitti: m[8],
+        brutto: luku(m[11]), alvPros: luku(m[12]), alv: luku(m[13]), netto: luku(m[14]), teksti: t,
+        huomio: ajat.length < 2 ? "Kellonaika puuttuu" : "" });
+      tulos.tilitysnumerot.add(m[6]);
+      continue;
+    }
+    // Loppusumma toistuu jokaisen sivun alareunassa: otetaan ensimmäinen
+    const s = new RegExp(`^Kokonais (${EUR}) ?€`).exec(t);
+    if (s && tulos.loppusumma == null) tulos.loppusumma = luku(s[1]);
+  }
+  const pv = /(\d{1,2}\.\d{1,2}\.\d{4})\s*$/.exec(rivit[0] || "");
+  tulos.tiedot = [pv && "päiväys " + pv[1], [...tulos.tilitysnumerot].map(n => "nro " + n).join(", ")].filter(Boolean).join(", ");
+  return tulos;
+}
+
+const N = "-?\\d+(?:\\.\\d+)?";
+const TILITETYT_RIVI = new RegExp(
+  `^(\\d+) (\\d+) (?:([A-Z0-9]+) )?(\\d{2}\\.\\d{2}\\.\\d{4}) (\\d{1,2}:\\d{2}) (\\d{2}\\.\\d{2}\\.\\d{4}) (\\d{1,2}:\\d{2})` +
+  ` (${N}) (${N}) (${N}) (${N}) (${N}) (${N}) (${N})(?: .*)?$`);
+
+function jasennaTilitetyt(rivit, malli) {
+  const tulos = { rivit: [], loppusumma: null };
+  const summarivi = malli === "KELA" ? /^Tilitykset yhteensä (\S+)/ : /^Yhteensä (\S+)/;
+  for (const t of rivit) {
+    const m = TILITETYT_RIVI.exec(t);
+    if (m) {
+      tulos.rivit.push({ auto: m[1], kuitti: m[2], varaus: m[3] || null, alku: aika(m[4], m[5]), loppu: aika(m[6], m[7]),
+        km: luku(m[8]), brutto: luku(m[9]), netto: luku(m[10]), alvPros: luku(m[11]), alv: luku(m[12]), teksti: t });
+      continue;
+    }
+    const s = summarivi.exec(t);
+    if (s && tulos.loppusumma == null) tulos.loppusumma = luku(s[1]);
+  }
+  const i = rivit.findIndex(t => t.toLowerCase().startsWith("raportti tilitetyistä"));
+  const pv = rivit.find(t => t.startsWith("Päiväys"));
+  tulos.tiedot = [rivit[i + 1], pv && pv.replace("Päiväys", "päiväys")].filter(Boolean).join(", ");
+  return tulos;
+}
+
+const E = "(-?\\d+(?:\\.\\d+)?) ?€";
+const ERITTELY_RIVI = new RegExp(
+  `^(\\d+) (?:(\\S+) )?(\\d+) (\\d+) (\\d{1,2}\\.\\d{1,2}\\.\\d{4}) (\\d{1,2}\\.\\d{1,2}\\.\\d{4}) ([\\d.]+) ?km ` +
+  `${E} ${E} ([\\d.]+) ?% ${E} ${E} ${E}$`);
+const ERITTELY_AJAT = /^(?:\d+ )?(\d{1,2}:\d{2}) (\d{1,2}:\d{2})$/;
+
+function jasennaErittely(rivit) {
+  const tulos = { rivit: [], loppusumma: null };
+  for (let i = 0; i < rivit.length; i++) {
+    const t = rivit[i];
+    const m = ERITTELY_RIVI.exec(t);
+    if (m) {
+      const ajat = ERITTELY_AJAT.exec(rivit[i + 1] || "");
+      tulos.rivit.push({ kuitti: m[1], varaus: m[2] || null, auto: m[4], alku: aika(m[5], ajat && ajat[1]),
+        loppu: aika(m[6], ajat && ajat[2]), km: luku(m[7]), brutto: luku(m[8]), alvPros: luku(m[10]),
+        netto: luku(m[11]), alv: luku(m[12]), teksti: t, huomio: ajat ? "" : "Kellonajat puuttuvat" });
+      if (ajat) i++;
+      continue;
+    }
+    // Ensimmäinen ajojen jälkeinen summarivi on "Lasku yhteensä"
+    if (tulos.rivit.length && tulos.loppusumma == null && !/^provisio/i.test(t)) {
+      const euro = t.match(/-?\d+(?:\.\d+)? ?€/g);
+      if (euro && euro.length >= 4) tulos.loppusumma = luku(euro[0]);
+    }
+  }
+  const viite = rivit.find(t => t.startsWith("Myyjän viite"));
+  const yhtio = rivit.find(t => t.startsWith("Taksiyhtiö"));
+  tulos.tiedot = [yhtio && yhtio.replace("Taksiyhtiö", "").replace(/ y-tunnus.*/i, "").trim(),
+                  viite && viite.replace("Myyjän viite", "viite")].filter(Boolean).join(", ");
+  return tulos;
+}
+
+async function kasittele(tiedosto) {
+  const rivit = await lueRivit(await tiedosto.arrayBuffer());
+  const malli = tunnista(rivit.join("\n"));
+  let t = { rivit: [], loppusumma: null, tiedot: "" };
+  if (malli === "BILL") t = jasennaBill(rivit);
+  else if (malli === "BILL2") t = jasennaBill2(rivit);
+  else if (malli === "TILITETYT" || malli === "KELA") t = jasennaTilitetyt(rivit, malli);
+  else if (malli === "ERITTELY") t = jasennaErittely(rivit);
+
+  // Ehdotettu lähdetyyppi
+  let ehdotus = MALLIN_OLETUS[malli] || "", peruste = "";
+  if (malli === "BILL") {
+    const nrot = [...t.asiakasnumerot];
+    const tyypit = new Set(nrot.map(n => ASIAKASNUMEROT[n]));
+    if (nrot.length && tyypit.size === 1 && !tyypit.has(undefined)) { ehdotus = [...tyypit][0]; peruste = `As. nro ${nrot.join(", ")}`; }
+    else peruste = nrot.length ? `Tuntematon As. nro ${nrot.join(", ")}` : "";
+  } else if (malli === "BILL2" && !ehdotus) peruste = "Tässä pohjassa ei ole asiakasnumeroa";
+  else if (ehdotus) peruste = MALLIEN_NIMET[malli];
+
+  // Täsmäytys
+  const brutto = summa(t.rivit, "brutto");
+  let tila;
+  if (malli === "TUNTEMATON") tila = ["virhe", "Raporttimallia ei tunnistettu, joten tästä PDF:stä ei voi tehdä Exceliä."];
+  else if (!t.rivit.length) tila = ["virhe", "PDF:stä ei löytynyt yhtään kyytiriviä."];
+  else if (t.loppusumma == null) tila = ["huom", "Raportin loppusummaa ei löytynyt, joten summia ei voitu tarkistaa."];
+  else if (Math.abs(brutto - t.loppusumma) > 0.011)
+    tila = ["virhe", `Rivien summa ${eur(brutto)} ei vastaa raportin loppusummaa ${eur(t.loppusumma)}. Jokin rivi jäi poimimatta: tarkista ennen käyttöä.`];
+  else tila = ["ok", `Rivien summa täsmää raportin loppusummaan ${eur(t.loppusumma)}.`];
+  const huomiot = t.rivit.filter(r => r.huomio).length;
+  if (huomiot && tila[0] === "ok") tila = ["huom", `${tila[1]} ${huomiot} rivillä puuttuu kellonaika.`];
+
+  t.rivit.forEach((r, i) => { r._nro = i + 1; r._muokattu = new Set(); r._poistettu = false; });
+  return { tiedosto, malli, rivit: t.rivit, tiedot: t.tiedot, ehdotus, peruste, tila, lahde: ehdotus, muuNimi: "" };
+}
+
+/* =====================================================================
+   Arvot ja muotoilu
+   ===================================================================== */
+const lahteenNimi = r => r.lahde === "Muu" ? (r.muuNimi.trim() || "Muu") : r.lahde;
+const arvo = (rivi, s, r) => s.kentta === "lahde" ? (rivi._lahde ?? lahteenNimi(r)) : rivi[s.kentta];
+const aktiiviset = r => r.rivit.filter(x => !x._poistettu);
+const p2 = n => String(n).padStart(2, "0");
+
+function naytto(v, tyyppi) {   // näytölle
+  if (v == null || v === "") return "";
+  if (tyyppi === "aika") return `${v.getDate()}.${v.getMonth() + 1}.${v.getFullYear()} ${v.getHours()}:${p2(v.getMinutes())}`;
+  if (tyyppi === "raha") return v.toLocaleString("fi-FI", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (tyyppi === "pros") return v.toLocaleString("fi-FI") + " %";
+  return String(v);
+}
+function leikepoyta(v, tyyppi, erotin) {   // Exceliin liitettäväksi
+  if (v == null || v === "") return "";
+  if (tyyppi === "aika") return erotin === ","
+    ? `${v.getDate()}.${v.getMonth() + 1}.${v.getFullYear()} ${v.getHours()}:${p2(v.getMinutes())}`
+    : `${v.getFullYear()}-${p2(v.getMonth() + 1)}-${p2(v.getDate())} ${p2(v.getHours())}:${p2(v.getMinutes())}`;
+  if (tyyppi === "raha") return v.toFixed(2).replace(".", erotin);
+  if (tyyppi === "pros") return String(v).replace(".", erotin) + "%";
+  return String(v).replace(/[\t\r\n]+/g, " ");
+}
+function tulkitse(teksti, tyyppi) {   // näytöltä takaisin arvoksi; undefined = virheellinen
+  teksti = teksti.replace(/\u00a0/g, " ").trim();
+  if (teksti === "") return null;
+  if (tyyppi === "aika") {
+    const m = /^(\d{1,2}[./]\d{1,2}[./]\d{2,4})(?:\s+(?:klo\s+)?(\d{1,2}[:.]\d{2}))?$/.exec(teksti);
+    return m ? aika(m[1], m[2] && m[2].replace(".", ":")) : undefined;
+  }
+  if (tyyppi === "raha" || tyyppi === "pros") {
+    const n = luku(teksti);
+    return isNaN(n) ? undefined : n;
+  }
+  return teksti;
+}
+const eur = x => x == null ? "" : naytto(x, "raha") + " €";
+
+/* =====================================================================
+   Yhdistetyt rivit: kopiointi ja Excel
+   ===================================================================== */
+const valmis = r => r.rivit.length && r.lahde && (r.lahde !== "Muu" || r.muuNimi.trim());
+const yhdistetyt = () => raportit.filter(valmis).flatMap(r => aktiiviset(r).map(rivi => ({ r, rivi })));
+
+let ASETUS = { otsikot: false, erotin: "," };
+try { Object.assign(ASETUS, JSON.parse(localStorage.getItem("tilitykset-asetukset") || "{}")); } catch (e) {}
+function tallennaAsetukset() { try { localStorage.setItem("tilitykset-asetukset", JSON.stringify(ASETUS)); } catch (e) {} }
+
+async function kopioiRivit(kohde) {
+  const lista = yhdistetyt();
+  if (!lista.length) return;
+  const rivit = lista.map(({ r, rivi }) => SARAKKEET.map(s => leikepoyta(arvo(rivi, s, r), s.tyyppi, ASETUS.erotin)).join("\t"));
+  if (ASETUS.otsikot) rivit.unshift(SARAKKEET.map(s => s.otsikko).join("\t"));
+  const teksti = rivit.join("\r\n") + "\r\n";
+  let ok = false;
+  try { await navigator.clipboard.writeText(teksti); ok = true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = teksti; ta.style.position = "fixed"; ta.style.opacity = "0";
+    (document.querySelector("dialog[open]") || document.body).appendChild(ta);
+    ta.select(); try { ok = document.execCommand("copy"); } catch (e2) {} ta.remove();
+  }
+  kohde.className = "ilmoitus " + (ok ? "ok" : "virhe");
+  kohde.textContent = ok
+    ? `Kopioitu ${lista.length} riviä${ASETUS.otsikot ? " ja otsikkorivi" : ""}. Liitä pää-Exceliin ensimmäiseen tyhjään soluun A-sarakkeessa (Ctrl+V).`
+    : "Kopiointi ei onnistunut. Lataa yhdistetty Excel ja kopioi rivit sieltä.";
+}
+
+function excelPaiva(d) {   // Date -> Excelin sarjanumero ilman aikavyöhykevääristymää
+  return (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()) - Date.UTC(1899, 11, 30)) / 86400000;
+}
+const EXCEL_MUOTO = { aika: "d.m.yyyy h:mm", raha: "#,##0.00", pros: "0.0%" };
+
+function teeExcel(lista, tiedostonimi) {   // lista: [{r, rivi}]
+  const ws = {};
+  SARAKKEET.forEach((s, c) => { ws[XLSX.utils.encode_cell({ r: 0, c })] = { t: "s", v: s.otsikko }; });
+  lista.forEach(({ r, rivi }, i) => {
+    SARAKKEET.forEach((s, c) => {
+      let v = arvo(rivi, s, r);
+      if (v == null || v === "") return;
+      let solu;
+      if (s.tyyppi === "aika") solu = { t: "n", v: excelPaiva(v) };
+      else if (s.tyyppi === "pros") solu = { t: "n", v: v / 100 };
+      else if (typeof v === "number") solu = { t: "n", v };
+      else if (/^\d{1,15}$/.test(v)) solu = { t: "n", v: Number(v) };
+      else solu = { t: "s", v: String(v) };
+      if (EXCEL_MUOTO[s.tyyppi]) solu.z = EXCEL_MUOTO[s.tyyppi];
+      ws[XLSX.utils.encode_cell({ r: i + 1, c })] = solu;
+    });
+  });
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(lista.length, 1), c: SARAKKEET.length - 1 } });
+  ws["!cols"] = SARAKKEET.map(s => ({ wch: s.leveys || 12 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Tiedot");
+  XLSX.writeFile(wb, tiedostonimi);
+}
+function lataaYksi(r) {
+  teeExcel(aktiiviset(r).map(rivi => ({ r, rivi })), r.tiedosto.name.replace(/\.pdf$/i, "") + ".xlsx");
+}
+function lataaYhdistetty() {
+  const lista = yhdistetyt();
+  if (!lista.length) return;
+  const n = new Date();
+  teeExcel(lista, `Tilitykset_yhdistetty_${n.getFullYear()}-${p2(n.getMonth() + 1)}-${p2(n.getDate())}_${p2(n.getHours())}${p2(n.getMinutes())}.xlsx`);
+}
+
+/* =====================================================================
+   Pääsivu
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const raportit = [];
+
+function piirra() {
+  $("#lista").innerHTML = raportit.length ? raportit.map((r, i) => {
+    const akt = aktiiviset(r);
+    const muokattuja = r.rivit.filter(x => x._muokattu.size && !x._poistettu).length;
+    const poistettuja = r.rivit.length - akt.length;
+    const muutokset = [muokattuja && `${muokattuja} riviä muokattu`, poistettuja && `${poistettuja} poistettu`].filter(Boolean).join(", ");
+    return `
+    <article class="kortti ${r.tila[0] === "ok" ? "ok" : r.tila[0] === "virhe" ? "virhe" : ""}">
+      <div class="yla">
+        <div><div class="nimi">${esc(r.tiedosto.name)}</div>
+          <div class="malli">${esc(MALLIEN_NIMET[r.malli])}${r.tiedot ? ", " + esc(r.tiedot) : ""}</div></div>
+        <button class="pieni" data-poista="${i}">Poista</button>
+      </div>
+      ${r.rivit.length ? `<div class="rivi">
+        <span><b>${akt.length}</b> kyytiä, yhteensä <b>${eur(summa(akt, "brutto"))}</b></span>
+        <label>Lähde <select data-lahde="${i}">
+          <option value="" ${r.lahde ? "" : "selected"} disabled>Valitse…</option>
+          ${LAHDETYYPIT.map(t => `<option ${t === r.lahde ? "selected" : ""}>${esc(t)}</option>`).join("")}
+        </select></label>
+        ${r.lahde === "Muu" ? `<label>Lähteen nimi <input type="text" data-nimi="${i}" value="${esc(r.muuNimi)}" placeholder="esim. Matkapalvelu"></label>` : ""}
+        <button class="pieni" data-lataa="${i}" ${valmis(r) ? "" : "disabled"}>Lataa tämän Excel</button>
+      </div>
+      <div class="malli">${r.ehdotus ? `Ehdotus perustuu: ${esc(r.peruste)}` : esc(r.peruste ? r.peruste + ": valitse lähde" : "Valitse lähde")}</div>` : ""}
+      <div class="tila ${r.tila[0]}">${esc(r.tila[1])}${muutokset ? ` Taulukossa: ${esc(muutokset)}.` : ""}</div>
+    </article>`; }).join("") : `<p class="tyhja">Lisätyt PDF:t näkyvät tässä.</p>`;
+  piirraYhteenveto();
+}
+
+function piirraYhteenveto() {
+  const lista = yhdistetyt();
+  const valmiit = raportit.filter(valmis).length;
+  const kesken = raportit.filter(r => r.rivit.length && !valmis(r)).length;
+  ["#kopioi", "#avaa", "#lataa"].forEach(s => $(s).disabled = !lista.length);
+  $("#yhteenveto").textContent = !raportit.length ? "Ei tiedostoja"
+    : !lista.length ? "Valitse lähde vähintään yhdelle PDF:lle."
+    : `Yhdistettynä ${lista.length} kyytiä ${valmiit} PDF:stä, yhteensä ${eur(summa(lista.map(x => x.rivi), "brutto"))}.` +
+      (kesken ? ` ${kesken} PDF:ää ilman lähdettä jää pois.` : "");
+}
+
+async function lisaa(tiedostot) {
+  for (const f of tiedostot) {
+    if (!/\.pdf$/i.test(f.name)) continue;
+    try { raportit.push(await kasittele(f)); }
+    catch (e) {
+      raportit.push({ tiedosto: f, malli: "TUNTEMATON", rivit: [], tiedot: "", lahde: "", muuNimi: "",
+        tila: ["virhe", `PDF:n lukeminen epäonnistui: ${e.message}`] });
+    }
+    piirra();
+  }
+  $("#ilmoitus").textContent = "";
+}
+
+document.addEventListener("change", e => {
+  const i = e.target.dataset.lahde;
+  if (i !== undefined) { raportit[i].lahde = e.target.value; piirra(); }
+});
+document.addEventListener("input", e => {
+  const i = e.target.dataset.nimi;
+  if (i !== undefined) {
+    raportit[i].muuNimi = e.target.value;
+    const b = document.querySelector(`[data-lataa="${i}"]`); if (b) b.disabled = !valmis(raportit[i]);
+    piirraYhteenveto();
+  }
+});
+document.addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.poista !== undefined) { raportit.splice(+d.poista, 1); piirra(); }
+  if (d.lataa !== undefined) lataaYksi(raportit[+d.lataa]);
+});
+$("#kopioi").addEventListener("click", () => kopioiRivit($("#ilmoitus")));
+$("#lataa").addEventListener("click", lataaYhdistetty);
+$("#avaa").addEventListener("click", avaaTaulukko);
+
+const kyltti = $("#kyltti");
+$("#valitsin").addEventListener("change", e => { lisaa([...e.target.files]); e.target.value = ""; });
+kyltti.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#valitsin").click(); } });
+document.addEventListener("dragover", e => { e.preventDefault(); kyltti.classList.add("yli"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) kyltti.classList.remove("yli"); });
+document.addEventListener("drop", e => { e.preventDefault(); kyltti.classList.remove("yli"); lisaa([...e.dataTransfer.files]); });
+
+/* =====================================================================
+   Yhdistetty taulukko (katselu ja muokkaus)
+   ===================================================================== */
+let TAULU = [];   // [{r, rivi}] mukaan lukien poistetut, jotta ne voi palauttaa
+
+function avaaTaulukko() {
+  TAULU = raportit.filter(valmis).flatMap(r => r.rivit.map(rivi => ({ r, rivi })));
+  $("#t-otsikot").checked = ASETUS.otsikot;
+  $("#t-erotin").value = ASETUS.erotin;
+  $("#t-ilmoitus").textContent = "";
+  $("#t-taulu").innerHTML = `
+    <thead><tr><th>#</th>${SARAKKEET.map(s => `<th class="${s.tyyppi === "raha" || s.tyyppi === "pros" ? "n" : ""}">${esc(s.otsikko)}</th>`).join("")}<th></th></tr></thead>
+    <tbody>${TAULU.map(({ r, rivi }, i) => `
+      <tr data-i="${i}" class="${rivi._poistettu ? "poistettu" : ""}" title="${esc(r.tiedosto.name)}, rivi ${rivi._nro}: ${esc(rivi.teksti)}">
+        <td class="nro">${i + 1}</td>
+        ${SARAKKEET.map((s, k) => `<td contenteditable="${rivi._poistettu ? "false" : "true"}" spellcheck="false" data-k="${k}"
+          class="${s.tyyppi === "raha" || s.tyyppi === "pros" ? "n" : ""} ${rivi._muokattu.has(s.kentta) ? "muokattu" : ""}">${esc(naytto(arvo(rivi, s, r), s.tyyppi))}</td>`).join("")}
+        <td><button class="pieni" data-rivi="${i}">${rivi._poistettu ? "Palauta" : "Poista"}</button></td>
+      </tr>`).join("")}</tbody>`;
+  piirraTaulukonYhteenveto();
+  $("#taulukko").showModal();
+}
+
+function piirraTaulukonYhteenveto() {
+  const akt = TAULU.filter(x => !x.rivi._poistettu);
+  const muok = akt.filter(x => x.rivi._muokattu.size).length;
+  const poist = TAULU.length - akt.length;
+  $("#t-yhteenveto").textContent = `${akt.length} riviä, brutto yhteensä ${eur(summa(akt.map(x => x.rivi), "brutto"))}` +
+    (muok ? `, ${muok} muokattu` : "") + (poist ? `, ${poist} poistettu (ei mukana kopiossa)` : "");
+  $("#t-kopioi").disabled = $("#t-lataa").disabled = !akt.length;
+}
+
+$("#t-taulu").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.matches("td[contenteditable]")) { e.preventDefault(); e.target.blur(); }
+  if (e.key === "Escape" && e.target.matches("td[contenteditable]")) {   // peru muokkaus
+    e.preventDefault(); e.stopPropagation();
+    const { r, rivi } = TAULU[+e.target.parentElement.dataset.i]; const s = SARAKKEET[+e.target.dataset.k];
+    e.target.textContent = naytto(arvo(rivi, s, r), s.tyyppi); e.target.blur();
+  }
+});
+$("#t-taulu").addEventListener("focusout", e => {
+  const td = e.target;
+  if (!td.matches("td[contenteditable]")) return;
+  const { r, rivi } = TAULU[+td.parentElement.dataset.i];
+  const s = SARAKKEET[+td.dataset.k];
+  const vanha = arvo(rivi, s, r);
+  const uusi = tulkitse(td.textContent, s.tyyppi);
+  if (uusi === undefined) {
+    $("#t-ilmoitus").className = "ilmoitus virhe";
+    $("#t-ilmoitus").textContent = `Arvoa "${td.textContent.trim()}" ei tunnistettu sarakkeeseen ${s.otsikko}, joten muutosta ei tallennettu.` +
+      (s.tyyppi === "aika" ? " Käytä muotoa 13.4.2026 9:40." : "");
+    td.textContent = naytto(vanha, s.tyyppi);
+    return;
+  }
+  const sama = s.tyyppi === "aika" ? (vanha && uusi && vanha.getTime() === uusi.getTime()) || (!vanha && !uusi)
+                                   : String(vanha ?? "") === String(uusi ?? "");
+  td.textContent = naytto(uusi, s.tyyppi);
+  if (sama) return;
+  if (s.kentta === "lahde") rivi._lahde = uusi; else rivi[s.kentta] = uusi;
+  rivi._muokattu.add(s.kentta);
+  td.classList.add("muokattu");
+  $("#t-ilmoitus").textContent = "";
+  piirraTaulukonYhteenveto();
+});
+$("#t-taulu").addEventListener("click", e => {
+  const i = e.target.dataset.rivi;
+  if (i === undefined) return;
+  const { rivi } = TAULU[+i];
+  rivi._poistettu = !rivi._poistettu;
+  const tr = e.target.closest("tr");
+  tr.classList.toggle("poistettu", rivi._poistettu);
+  tr.querySelectorAll("td[data-k]").forEach(td => td.contentEditable = rivi._poistettu ? "false" : "true");
+  e.target.textContent = rivi._poistettu ? "Palauta" : "Poista";
+  piirraTaulukonYhteenveto();
+});
+$("#t-otsikot").addEventListener("change", e => { ASETUS.otsikot = e.target.checked; tallennaAsetukset(); });
+$("#t-erotin").addEventListener("change", e => { ASETUS.erotin = e.target.value; tallennaAsetukset(); });
+$("#t-kopioi").addEventListener("click", () => kopioiRivit($("#t-ilmoitus")));
+$("#t-lataa").addEventListener("click", lataaYhdistetty);
+$("#t-sulje").addEventListener("click", () => $("#taulukko").close());
+$("#taulukko").addEventListener("close", piirra);
+</script>
+</body>
+</html>
