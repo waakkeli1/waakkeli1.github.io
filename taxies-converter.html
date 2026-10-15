@@ -21,6 +21,10 @@
 body{margin:0;background:var(--tausta);color:var(--teksti);font:16px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
 main{max-width:980px;margin:0 auto;padding:28px 20px 60px}
 h1{font-size:1.9rem;margin:0 0 4px}
+.ylapalkki{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.kielivalinta{display:flex;align-items:center;gap:6px;color:var(--vaimea)}
+.kielivalinta svg{width:20px;height:20px;flex:none}
+.kielivalinta select{padding:4px 8px;font-size:.93rem}
 h2{font-size:1.3rem;margin:0}
 .alaotsikko{color:var(--vaimea);margin:0 0 20px}
 .kyltti{display:block;background:var(--keltainen);color:#23272E;border-radius:40px 40px 10px 10px;padding:30px 24px;
@@ -29,6 +33,7 @@ h2{font-size:1.3rem;margin:0}
 .kyltti:focus-visible{outline:3px solid var(--teksti);outline-offset:3px}
 .kyltti strong{display:block;font-size:1.6rem}
 .kyltti input{display:none}
+.piilo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .yhdistetty{background:var(--pinta);border:1px solid var(--viiva);border-radius:8px;padding:14px 16px;margin:22px 0 14px}
 .yhdistetty .napit{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
 .yhdistetty span{color:var(--vaimea)}
@@ -81,21 +86,33 @@ dialog::backdrop{background:rgba(20,22,26,.55)}
 </head>
 <body>
 <main>
-  <h1>Tilitys-PDF → Excel</h1>
-  <p class="alaotsikko">Tuo PDF:t, kopioi yhdistetyt rivit ja liitä ne pää-Exceliin. Tiedostot käsitellään vain tässä selaimessa, niitä ei lähetetä minnekään.</p>
+  <header class="ylapalkki">
+    <h1 data-t="otsikko">Tilitys-PDF → Excel</h1>
+    <label class="kielivalinta" title="Kieli / Язык">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>
+      </svg>
+      <span class="piilo" data-t="kieli">Kieli</span>
+      <select id="kieli" aria-label="Kieli / Язык">
+        <option value="fi">Suomi</option>
+        <option value="ru">Русский</option>
+      </select>
+    </label>
+  </header>
+  <p class="alaotsikko" data-t="alaotsikko">Tuo PDF:t, kopioi yhdistetyt rivit ja liitä ne pää-Exceliin. Tiedostot käsitellään vain tässä selaimessa, niitä ei lähetetä minnekään.</p>
 
   <label class="kyltti" id="kyltti" tabindex="0">
-    <strong>Pudota PDF:t tähän</strong>
-    <span>tai valitse tiedostot napsauttamalla</span>
+    <strong data-t="pudota">Pudota PDF:t tähän</strong>
+    <span data-t="taiValitse">tai valitse tiedostot napsauttamalla</span>
     <input type="file" id="valitsin" accept=".pdf,application/pdf" multiple>
   </label>
 
-  <section class="yhdistetty" aria-label="Yhdistetyt rivit">
+  <section class="yhdistetty" id="yhdistetty" aria-label="Yhdistetyt rivit">
     <span id="yhteenveto">Ei tiedostoja</span>
     <div class="napit">
-      <button class="ensisijainen" id="kopioi" disabled>Kopioi yhdistetyt rivit</button>
-      <button class="toissijainen" id="avaa" disabled>Näytä ja muokkaa taulukkoa</button>
-      <button class="toissijainen" id="lataa" disabled>Lataa yhdistetty Excel</button>
+      <button class="ensisijainen" id="kopioi" disabled data-t="kopioiYhdistetyt">Kopioi yhdistetyt rivit</button>
+      <button class="toissijainen" id="avaa" disabled data-t="avaaTaulukko">Näytä ja muokkaa taulukkoa</button>
+      <button class="toissijainen" id="lataa" disabled data-t="lataaYhdistetty">Lataa yhdistetty Excel</button>
     </div>
     <p class="ilmoitus" id="ilmoitus" role="status"></p>
   </section>
@@ -105,21 +122,20 @@ dialog::backdrop{background:rgba(20,22,26,.55)}
 
 <dialog id="taulukko" aria-labelledby="t-otsikko">
   <div class="d-yla">
-    <div><h2 id="t-otsikko">Yhdistetty taulukko</h2><span id="t-yhteenveto"></span></div>
-    <button class="toissijainen" id="t-sulje">Sulje</button>
+    <div><h2 id="t-otsikko" data-t="yhdistettyTaulukko">Yhdistetty taulukko</h2><span id="t-yhteenveto"></span></div>
+    <button class="toissijainen" id="t-sulje" data-t="sulje">Sulje</button>
   </div>
   <div class="d-toiminnot">
-    <button class="ensisijainen" id="t-kopioi">Kopioi rivit</button>
-    <label><input type="checkbox" id="t-otsikot"> Otsikkorivi mukaan</label>
-    <label>Excelin kieli
+    <button class="ensisijainen" id="t-kopioi" data-t="kopioiRivit">Kopioi rivit</button>
+    <label><input type="checkbox" id="t-otsikot"> <span data-t="otsikkoriviMukaan">Otsikkorivi mukaan</span></label>
+    <label><span data-t="excelinKieli">Excelin kieli</span>
       <select id="t-erotin">
-        <option value=",">Suomi (desimaalipilkku)</option>
-        <option value=".">Englanti (desimaalipiste)</option>
+        <option value="," data-t="erotinPilkku">Suomi (desimaalipilkku)</option>
+        <option value="." data-t="erotinPiste">Englanti (desimaalipiste)</option>
       </select></label>
-    <button class="toissijainen" id="t-lataa">Lataa Excel</button>
+    <button class="toissijainen" id="t-lataa" data-t="lataaExcel">Lataa Excel</button>
   </div>
-  <p class="vihje">Korjaa arvo napsauttamalla solua. Muutetut solut näkyvät keltaisina ja menevät mukaan kopioon ja Exceliin.
-    Vie hiiri rivin päälle nähdäksesi, mistä PDF:stä se on.</p>
+  <p class="vihje" data-t="vihje">Korjaa arvo napsauttamalla solua. Muutetut solut näkyvät keltaisina ja menevät mukaan kopioon ja Exceliin. Vie hiiri rivin päälle nähdäksesi, mistä PDF:stä se on.</p>
   <div class="d-ilmoitus"><p class="ilmoitus" id="t-ilmoitus" role="status"></p></div>
   <div class="d-taulu"><table id="t-taulu"></table></div>
 </dialog>
@@ -152,6 +168,145 @@ const SARAKKEET = [
   { otsikko: "Alv",          kentta: "alv",     tyyppi: "raha",   leveys: 10 },
   { otsikko: "Alv %",        kentta: "alvPros", tyyppi: "pros",   leveys: 8 },
 ];
+
+/* =====================================================================
+   KÄYTTÖLIITTYMÄN TEKSTIT (fi / ru)
+   Vain käyttöliittymä käännetään. Data pysyy suomeksi: sarakeotsikot, lähdetyypit,
+   solujen arvot, Excelin välilehti ja tiedostonimet.
+   ===================================================================== */
+const TEKSTIT = {
+  fi: {
+    otsikko: "Tilitys-PDF → Excel",
+    kieli: "Kieli",
+    alaotsikko: "Tuo PDF:t, kopioi yhdistetyt rivit ja liitä ne pää-Exceliin. Tiedostot käsitellään vain tässä selaimessa, niitä ei lähetetä minnekään.",
+    pudota: "Pudota PDF:t tähän",
+    taiValitse: "tai valitse tiedostot napsauttamalla",
+    yhdistetytRivit: "Yhdistetyt rivit",
+    kopioiYhdistetyt: "Kopioi yhdistetyt rivit",
+    avaaTaulukko: "Näytä ja muokkaa taulukkoa",
+    lataaYhdistetty: "Lataa yhdistetty Excel",
+    tyhjaLista: "Lisätyt PDF:t näkyvät tässä.",
+    eiTiedostoja: "Ei tiedostoja",
+    valitseLahdeVahintaan: "Valitse lähde vähintään yhdelle PDF:lle.",
+    yhdistettyna: p => `Yhdistettynä ${p.n} kyytiä ${p.m} PDF:stä, yhteensä ${p.summa}.`,
+    kesken: p => ` ${p.k} PDF:ää ilman lähdettä jää pois.`,
+    poista: "Poista",
+    palauta: "Palauta",
+    kyytejaYhteensa: p => `<b>${p.n}</b> kyytiä, yhteensä <b>${p.summa}</b>`,
+    lahde: "Lähde",
+    valitse: "Valitse…",
+    lahteenNimi: "Lähteen nimi",
+    esimMuu: "esim. Matkapalvelu",
+    lataaTaman: "Lataa tämän Excel",
+    ehdotusPerustuu: p => `Ehdotus perustuu: ${p.x}`,
+    perusteValitse: p => `${p.x}: valitse lähde`,
+    valitseLahde: "Valitse lähde",
+    asNro: p => `As. nro ${p.x}`,
+    tuntematonAsNro: p => `Tuntematon As. nro ${p.x}`,
+    eiAsiakasnumeroa: "Tässä pohjassa ei ole asiakasnumeroa",
+    taulukossa: p => ` Taulukossa: ${[p.m && `${p.m} riviä muokattu`, p.p && `${p.p} poistettu`].filter(Boolean).join(", ")}.`,
+    tuntematonMalli: "Raporttimallia ei tunnistettu, joten tästä PDF:stä ei voi tehdä Exceliä.",
+    eiRiveja: "PDF:stä ei löytynyt yhtään kyytiriviä.",
+    eiLoppusummaa: "Raportin loppusummaa ei löytynyt, joten summia ei voitu tarkistaa.",
+    eiTasmaa: p => `Rivien summa ${p.a} ei vastaa raportin loppusummaa ${p.b}. Jokin rivi jäi poimimatta: tarkista ennen käyttöä.`,
+    tasmaa: p => `Rivien summa täsmää raportin loppusummaan ${p.b}.`,
+    puuttuuAika: p => ` ${p.n} rivillä puuttuu kellonaika.`,
+    lukuvirhe: p => `PDF:n lukeminen epäonnistui: ${p.x}`,
+    nro: "nro", paivays: "päiväys", viite: "viite",
+    malli_BILL: "BILL-tilitys",
+    malli_BILL2: "BILL-tilitys (uusi pohja)",
+    malli_TILITETYT: "Tilitetyt tapahtumat",
+    malli_KELA: "Kela-tilitys",
+    malli_ERITTELY: "Tilityserittely",
+    malli_TUNTEMATON: "Tuntematon raporttimalli",
+    kopioitu: p => `Kopioitu ${p.n} riviä${p.otsikot ? " ja otsikkorivi" : ""}. Liitä pää-Exceliin ensimmäiseen tyhjään soluun A-sarakkeessa (Ctrl+V).`,
+    kopiointiEpaonnistui: "Kopiointi ei onnistunut. Lataa yhdistetty Excel ja kopioi rivit sieltä.",
+    yhdistettyTaulukko: "Yhdistetty taulukko",
+    sulje: "Sulje",
+    kopioiRivit: "Kopioi rivit",
+    otsikkoriviMukaan: "Otsikkorivi mukaan",
+    excelinKieli: "Excelin kieli",
+    erotinPilkku: "Suomi (desimaalipilkku)",
+    erotinPiste: "Englanti (desimaalipiste)",
+    lataaExcel: "Lataa Excel",
+    vihje: "Korjaa arvo napsauttamalla solua. Muutetut solut näkyvät keltaisina ja menevät mukaan kopioon ja Exceliin. Vie hiiri rivin päälle nähdäksesi, mistä PDF:stä se on.",
+    riviTooltip: p => `${p.tiedosto}, rivi ${p.nro}: ${p.teksti}`,
+    taulukonYhteenveto: p => `${p.n} riviä, brutto yhteensä ${p.summa}` +
+      (p.m ? `, ${p.m} muokattu` : "") + (p.p ? `, ${p.p} poistettu (ei mukana kopiossa)` : ""),
+    eiTunnistettu: p => `Arvoa "${p.v}" ei tunnistettu sarakkeeseen ${p.s}, joten muutosta ei tallennettu.` +
+      (p.aika ? " Käytä muotoa 13.4.2026 9:40." : ""),
+  },
+  ru: {
+    otsikko: "PDF-отчёты → Excel",
+    kieli: "Язык",
+    alaotsikko: "Загрузите PDF-файлы, скопируйте объединённые строки и вставьте их в основной Excel. Файлы обрабатываются только в этом браузере и никуда не отправляются.",
+    pudota: "Перетащите PDF-файлы сюда",
+    taiValitse: "или нажмите, чтобы выбрать файлы",
+    yhdistetytRivit: "Объединённые строки",
+    kopioiYhdistetyt: "Копировать объединённые строки",
+    avaaTaulukko: "Просмотр и редактирование таблицы",
+    lataaYhdistetty: "Скачать объединённый Excel",
+    tyhjaLista: "Добавленные PDF-файлы появятся здесь.",
+    eiTiedostoja: "Нет файлов",
+    valitseLahdeVahintaan: "Выберите источник хотя бы для одного PDF-файла.",
+    yhdistettyna: p => `Объединено поездок: ${p.n} (PDF-файлов: ${p.m}), итого ${p.summa}.`,
+    kesken: p => ` PDF-файлов без источника: ${p.k}, они не будут включены.`,
+    poista: "Удалить",
+    palauta: "Восстановить",
+    kyytejaYhteensa: p => `Поездок: <b>${p.n}</b>, итого <b>${p.summa}</b>`,
+    lahde: "Источник",
+    valitse: "Выберите…",
+    lahteenNimi: "Название источника",
+    esimMuu: "напр. Matkapalvelu",
+    lataaTaman: "Скачать Excel этого файла",
+    ehdotusPerustuu: p => `Предложено на основе: ${p.x}`,
+    perusteValitse: p => `${p.x}: выберите источник`,
+    valitseLahde: "Выберите источник",
+    asNro: p => `As. nro ${p.x}`,
+    tuntematonAsNro: p => `Неизвестный As. nro ${p.x}`,
+    eiAsiakasnumeroa: "В этом шаблоне нет номера клиента",
+    taulukossa: p => ` В таблице: ${[p.m && `изменено строк: ${p.m}`, p.p && `удалено строк: ${p.p}`].filter(Boolean).join(", ")}.`,
+    tuntematonMalli: "Шаблон отчёта не распознан, поэтому из этого PDF нельзя создать Excel.",
+    eiRiveja: "В PDF не найдено ни одной строки с поездкой.",
+    eiLoppusummaa: "Итоговая сумма отчёта не найдена, поэтому суммы не удалось проверить.",
+    eiTasmaa: p => `Сумма строк ${p.a} не совпадает с итоговой суммой отчёта ${p.b}. Какая-то строка не была извлечена: проверьте перед использованием.`,
+    tasmaa: p => `Сумма строк совпадает с итоговой суммой отчёта ${p.b}.`,
+    puuttuuAika: p => ` Строк без времени: ${p.n}.`,
+    lukuvirhe: p => `Не удалось прочитать PDF: ${p.x}`,
+    nro: "№", paivays: "дата", viite: "ссылка",
+    malli_BILL: "Отчёт BILL",
+    malli_BILL2: "Отчёт BILL (новый шаблон)",
+    malli_TILITETYT: "Перечисленные операции",
+    malli_KELA: "Расчёт Kela",
+    malli_ERITTELY: "Детализация расчёта",
+    malli_TUNTEMATON: "Неизвестный шаблон отчёта",
+    kopioitu: p => `Скопировано строк: ${p.n}${p.otsikot ? " и строка заголовков" : ""}. Вставьте их в основной Excel в первую пустую ячейку столбца A (Ctrl+V).`,
+    kopiointiEpaonnistui: "Не удалось скопировать. Скачайте объединённый Excel и скопируйте строки из него.",
+    yhdistettyTaulukko: "Объединённая таблица",
+    sulje: "Закрыть",
+    kopioiRivit: "Копировать строки",
+    otsikkoriviMukaan: "Включить строку заголовков",
+    excelinKieli: "Язык Excel",
+    erotinPilkku: "Финский или русский (десятичная запятая)",
+    erotinPiste: "Английский (десятичная точка)",
+    lataaExcel: "Скачать Excel",
+    vihje: "Чтобы исправить значение, нажмите на ячейку. Изменённые ячейки выделяются жёлтым и попадают в копию и в Excel. Наведите курсор на строку, чтобы увидеть, из какого PDF она взята.",
+    riviTooltip: p => `${p.tiedosto}, строка ${p.nro}: ${p.teksti}`,
+    taulukonYhteenveto: p => `Строк: ${p.n}, брутто итого ${p.summa}` +
+      (p.m ? `, изменено: ${p.m}` : "") + (p.p ? `, удалено: ${p.p} (не входят в копию)` : ""),
+    eiTunnistettu: p => `Значение «${p.v}» не распознано для столбца ${p.s}, изменение не сохранено.` +
+      (p.aika ? " Используйте формат 13.4.2026 9:40." : ""),
+  },
+};
+let KIELI = "fi";
+try { const k = localStorage.getItem("tilitykset-kieli"); if (TEKSTIT[k]) KIELI = k; } catch (e) {}
+function t(avain, p = {}) {
+  const v = TEKSTIT[KIELI][avain] ?? TEKSTIT.fi[avain] ?? avain;
+  return typeof v === "function" ? v(p) : v;
+}
+// Viesti tallennetaan avaimena, jotta se näkyy aina valitulla kielellä: [avain, parametrit]
+const viesti = (avain, p) => [avain, p || {}];
+const tekstiksi = viestit => viestit.map(([k, p]) => t(k, p)).join("");
 
 /* =====================================================================
    PDF:n lukeminen tekstiriveiksi
@@ -217,8 +372,7 @@ function tunnista(teksti) {
   if (t.includes("varausnumero") && t.includes("tilitysnumero") && t.includes("autonumero")) return "BILL2";
   return "TUNTEMATON";
 }
-const MALLIEN_NIMET = { BILL: "BILL-tilitys", BILL2: "BILL-tilitys (uusi pohja)", TILITETYT: "Tilitetyt tapahtumat",
-  KELA: "Kela-tilitys", ERITTELY: "Tilityserittely", TUNTEMATON: "Tuntematon raporttimalli" };
+const mallinNimi = m => t("malli_" + m);
 
 const EUR = "-?\\d{1,3}(?:[ \\u00a0]\\d{3})*,\\d{2}";
 
@@ -242,7 +396,8 @@ function jasennaBill(rivit) {
     m = new RegExp(`^Kokonais (${EUR}) ?€`).exec(t);
     if (m && tulos.loppusumma == null) tulos.loppusumma = luku(m[1]);
   }
-  tulos.tiedot = (rivit.find(t => t.startsWith("Tilitysnumero:")) || "").replace("Tilitysnumero:", "nro").trim();
+  const nro = (rivit.find(t => t.startsWith("Tilitysnumero:")) || "").replace("Tilitysnumero:", "").trim();
+  tulos.tiedot = nro ? [["nro", nro]] : [];
   return tulos;
 }
 
@@ -278,7 +433,7 @@ function jasennaBill2(rivit) {
     if (s && tulos.loppusumma == null) tulos.loppusumma = luku(s[1]);
   }
   const pv = /(\d{1,2}\.\d{1,2}\.\d{4})\s*$/.exec(rivit[0] || "");
-  tulos.tiedot = [pv && "päiväys " + pv[1], [...tulos.tilitysnumerot].map(n => "nro " + n).join(", ")].filter(Boolean).join(", ");
+  tulos.tiedot = [...(pv ? [["paivays", pv[1]]] : []), ...[...tulos.tilitysnumerot].map(n => ["nro", n])];
   return tulos;
 }
 
@@ -302,7 +457,8 @@ function jasennaTilitetyt(rivit, malli) {
   }
   const i = rivit.findIndex(t => t.toLowerCase().startsWith("raportti tilitetyistä"));
   const pv = rivit.find(t => t.startsWith("Päiväys"));
-  tulos.tiedot = [rivit[i + 1], pv && pv.replace("Päiväys", "päiväys")].filter(Boolean).join(", ");
+  tulos.tiedot = [...(i >= 0 && rivit[i + 1] ? [[null, rivit[i + 1]]] : []),
+                  ...(pv ? [["paivays", pv.replace("Päiväys", "").trim()]] : [])];
   return tulos;
 }
 
@@ -333,44 +489,44 @@ function jasennaErittely(rivit) {
   }
   const viite = rivit.find(t => t.startsWith("Myyjän viite"));
   const yhtio = rivit.find(t => t.startsWith("Taksiyhtiö"));
-  tulos.tiedot = [yhtio && yhtio.replace("Taksiyhtiö", "").replace(/ y-tunnus.*/i, "").trim(),
-                  viite && viite.replace("Myyjän viite", "viite")].filter(Boolean).join(", ");
+  tulos.tiedot = [...(yhtio ? [[null, yhtio.replace("Taksiyhtiö", "").replace(/ y-tunnus.*/i, "").trim()]] : []),
+                  ...(viite ? [["viite", viite.replace("Myyjän viite", "").trim()]] : [])];
   return tulos;
 }
 
 async function kasittele(tiedosto) {
   const rivit = await lueRivit(await tiedosto.arrayBuffer());
   const malli = tunnista(rivit.join("\n"));
-  let t = { rivit: [], loppusumma: null, tiedot: "" };
-  if (malli === "BILL") t = jasennaBill(rivit);
-  else if (malli === "BILL2") t = jasennaBill2(rivit);
-  else if (malli === "TILITETYT" || malli === "KELA") t = jasennaTilitetyt(rivit, malli);
-  else if (malli === "ERITTELY") t = jasennaErittely(rivit);
+  let tulos = { rivit: [], loppusumma: null, tiedot: [] };
+  if (malli === "BILL") tulos = jasennaBill(rivit);
+  else if (malli === "BILL2") tulos = jasennaBill2(rivit);
+  else if (malli === "TILITETYT" || malli === "KELA") tulos = jasennaTilitetyt(rivit, malli);
+  else if (malli === "ERITTELY") tulos = jasennaErittely(rivit);
 
   // Ehdotettu lähdetyyppi
-  let ehdotus = MALLIN_OLETUS[malli] || "", peruste = "";
+  let ehdotus = MALLIN_OLETUS[malli] || "", peruste = null;
   if (malli === "BILL") {
-    const nrot = [...t.asiakasnumerot];
+    const nrot = [...tulos.asiakasnumerot];
     const tyypit = new Set(nrot.map(n => ASIAKASNUMEROT[n]));
-    if (nrot.length && tyypit.size === 1 && !tyypit.has(undefined)) { ehdotus = [...tyypit][0]; peruste = `As. nro ${nrot.join(", ")}`; }
-    else peruste = nrot.length ? `Tuntematon As. nro ${nrot.join(", ")}` : "";
-  } else if (malli === "BILL2" && !ehdotus) peruste = "Tässä pohjassa ei ole asiakasnumeroa";
-  else if (ehdotus) peruste = MALLIEN_NIMET[malli];
+    if (nrot.length && tyypit.size === 1 && !tyypit.has(undefined)) { ehdotus = [...tyypit][0]; peruste = viesti("asNro", { x: nrot.join(", ") }); }
+    else peruste = nrot.length ? viesti("tuntematonAsNro", { x: nrot.join(", ") }) : null;
+  } else if (malli === "BILL2" && !ehdotus) peruste = viesti("eiAsiakasnumeroa");
+  else if (ehdotus) peruste = viesti("malli_" + malli);
 
   // Täsmäytys
-  const brutto = summa(t.rivit, "brutto");
+  const brutto = summa(tulos.rivit, "brutto");
   let tila;
-  if (malli === "TUNTEMATON") tila = ["virhe", "Raporttimallia ei tunnistettu, joten tästä PDF:stä ei voi tehdä Exceliä."];
-  else if (!t.rivit.length) tila = ["virhe", "PDF:stä ei löytynyt yhtään kyytiriviä."];
-  else if (t.loppusumma == null) tila = ["huom", "Raportin loppusummaa ei löytynyt, joten summia ei voitu tarkistaa."];
-  else if (Math.abs(brutto - t.loppusumma) > 0.011)
-    tila = ["virhe", `Rivien summa ${eur(brutto)} ei vastaa raportin loppusummaa ${eur(t.loppusumma)}. Jokin rivi jäi poimimatta: tarkista ennen käyttöä.`];
-  else tila = ["ok", `Rivien summa täsmää raportin loppusummaan ${eur(t.loppusumma)}.`];
-  const huomiot = t.rivit.filter(r => r.huomio).length;
-  if (huomiot && tila[0] === "ok") tila = ["huom", `${tila[1]} ${huomiot} rivillä puuttuu kellonaika.`];
+  if (malli === "TUNTEMATON") tila = ["virhe", [viesti("tuntematonMalli")]];
+  else if (!tulos.rivit.length) tila = ["virhe", [viesti("eiRiveja")]];
+  else if (tulos.loppusumma == null) tila = ["huom", [viesti("eiLoppusummaa")]];
+  else if (Math.abs(brutto - tulos.loppusumma) > 0.011)
+    tila = ["virhe", [viesti("eiTasmaa", { a: eur(brutto), b: eur(tulos.loppusumma) })]];
+  else tila = ["ok", [viesti("tasmaa", { b: eur(tulos.loppusumma) })]];
+  const huomiot = tulos.rivit.filter(r => r.huomio).length;
+  if (huomiot && tila[0] === "ok") tila = ["huom", [...tila[1], viesti("puuttuuAika", { n: huomiot })]];
 
-  t.rivit.forEach((r, i) => { r._nro = i + 1; r._muokattu = new Set(); r._poistettu = false; });
-  return { tiedosto, malli, rivit: t.rivit, tiedot: t.tiedot, ehdotus, peruste, tila, lahde: ehdotus, muuNimi: "" };
+  tulos.rivit.forEach((r, i) => { r._nro = i + 1; r._muokattu = new Set(); r._poistettu = false; });
+  return { tiedosto, malli, rivit: tulos.rivit, tiedot: tulos.tiedot, ehdotus, peruste, tila, lahde: ehdotus, muuNimi: "" };
 }
 
 /* =====================================================================
@@ -437,9 +593,7 @@ async function kopioiRivit(kohde) {
     ta.select(); try { ok = document.execCommand("copy"); } catch (e2) {} ta.remove();
   }
   kohde.className = "ilmoitus " + (ok ? "ok" : "virhe");
-  kohde.textContent = ok
-    ? `Kopioitu ${lista.length} riviä${ASETUS.otsikot ? " ja otsikkorivi" : ""}. Liitä pää-Exceliin ensimmäiseen tyhjään soluun A-sarakkeessa (Ctrl+V).`
-    : "Kopiointi ei onnistunut. Lataa yhdistetty Excel ja kopioi rivit sieltä.";
+  kohde.textContent = ok ? t("kopioitu", { n: lista.length, otsikot: ASETUS.otsikot }) : t("kopiointiEpaonnistui");
 }
 
 function excelPaiva(d) {   // Date -> Excelin sarjanumero ilman aikavyöhykevääristymää
@@ -492,26 +646,27 @@ function piirra() {
     const akt = aktiiviset(r);
     const muokattuja = r.rivit.filter(x => x._muokattu.size && !x._poistettu).length;
     const poistettuja = r.rivit.length - akt.length;
-    const muutokset = [muokattuja && `${muokattuja} riviä muokattu`, poistettuja && `${poistettuja} poistettu`].filter(Boolean).join(", ");
+    const muutokset = muokattuja || poistettuja;
     return `
     <article class="kortti ${r.tila[0] === "ok" ? "ok" : r.tila[0] === "virhe" ? "virhe" : ""}">
       <div class="yla">
         <div><div class="nimi">${esc(r.tiedosto.name)}</div>
-          <div class="malli">${esc(MALLIEN_NIMET[r.malli])}${r.tiedot ? ", " + esc(r.tiedot) : ""}</div></div>
-        <button class="pieni" data-poista="${i}">Poista</button>
+          <div class="malli">${esc([mallinNimi(r.malli), ...r.tiedot.map(([k, v]) => k ? `${t(k)} ${v}` : v)].join(", "))}</div></div>
+        <button class="pieni" data-poista="${i}">${esc(t("poista"))}</button>
       </div>
       ${r.rivit.length ? `<div class="rivi">
-        <span><b>${akt.length}</b> kyytiä, yhteensä <b>${eur(summa(akt, "brutto"))}</b></span>
-        <label>Lähde <select data-lahde="${i}">
-          <option value="" ${r.lahde ? "" : "selected"} disabled>Valitse…</option>
+        <span>${t("kyytejaYhteensa", { n: akt.length, summa: esc(eur(summa(akt, "brutto"))) })}</span>
+        <label>${esc(t("lahde"))} <select data-lahde="${i}">
+          <option value="" ${r.lahde ? "" : "selected"} disabled>${esc(t("valitse"))}</option>
           ${LAHDETYYPIT.map(t => `<option ${t === r.lahde ? "selected" : ""}>${esc(t)}</option>`).join("")}
         </select></label>
-        ${r.lahde === "Muu" ? `<label>Lähteen nimi <input type="text" data-nimi="${i}" value="${esc(r.muuNimi)}" placeholder="esim. Matkapalvelu"></label>` : ""}
-        <button class="pieni" data-lataa="${i}" ${valmis(r) ? "" : "disabled"}>Lataa tämän Excel</button>
+        ${r.lahde === "Muu" ? `<label>${esc(t("lahteenNimi"))} <input type="text" data-nimi="${i}" value="${esc(r.muuNimi)}" placeholder="${esc(t("esimMuu"))}"></label>` : ""}
+        <button class="pieni" data-lataa="${i}" ${valmis(r) ? "" : "disabled"}>${esc(t("lataaTaman"))}</button>
       </div>
-      <div class="malli">${r.ehdotus ? `Ehdotus perustuu: ${esc(r.peruste)}` : esc(r.peruste ? r.peruste + ": valitse lähde" : "Valitse lähde")}</div>` : ""}
-      <div class="tila ${r.tila[0]}">${esc(r.tila[1])}${muutokset ? ` Taulukossa: ${esc(muutokset)}.` : ""}</div>
-    </article>`; }).join("") : `<p class="tyhja">Lisätyt PDF:t näkyvät tässä.</p>`;
+      <div class="malli">${esc(r.ehdotus ? t("ehdotusPerustuu", { x: tekstiksi([r.peruste]) })
+        : r.peruste ? t("perusteValitse", { x: tekstiksi([r.peruste]) }) : t("valitseLahde"))}</div>` : ""}
+      <div class="tila ${r.tila[0]}">${esc(tekstiksi(r.tila[1]))}${muutokset ? esc(t("taulukossa", { m: muokattuja, p: poistettuja })) : ""}</div>
+    </article>`; }).join("") : `<p class="tyhja">${esc(t("tyhjaLista"))}</p>`;
   piirraYhteenveto();
 }
 
@@ -520,10 +675,10 @@ function piirraYhteenveto() {
   const valmiit = raportit.filter(valmis).length;
   const kesken = raportit.filter(r => r.rivit.length && !valmis(r)).length;
   ["#kopioi", "#avaa", "#lataa"].forEach(s => $(s).disabled = !lista.length);
-  $("#yhteenveto").textContent = !raportit.length ? "Ei tiedostoja"
-    : !lista.length ? "Valitse lähde vähintään yhdelle PDF:lle."
-    : `Yhdistettynä ${lista.length} kyytiä ${valmiit} PDF:stä, yhteensä ${eur(summa(lista.map(x => x.rivi), "brutto"))}.` +
-      (kesken ? ` ${kesken} PDF:ää ilman lähdettä jää pois.` : "");
+  $("#yhteenveto").textContent = !raportit.length ? t("eiTiedostoja")
+    : !lista.length ? t("valitseLahdeVahintaan")
+    : t("yhdistettyna", { n: lista.length, m: valmiit, summa: eur(summa(lista.map(x => x.rivi), "brutto")) }) +
+      (kesken ? t("kesken", { k: kesken }) : "");
 }
 
 async function lisaa(tiedostot) {
@@ -531,8 +686,8 @@ async function lisaa(tiedostot) {
     if (!/\.pdf$/i.test(f.name)) continue;
     try { raportit.push(await kasittele(f)); }
     catch (e) {
-      raportit.push({ tiedosto: f, malli: "TUNTEMATON", rivit: [], tiedot: "", lahde: "", muuNimi: "",
-        tila: ["virhe", `PDF:n lukeminen epäonnistui: ${e.message}`] });
+      raportit.push({ tiedosto: f, malli: "TUNTEMATON", rivit: [], tiedot: [], lahde: "", muuNimi: "",
+        tila: ["virhe", [viesti("lukuvirhe", { x: e.message })]] });
     }
     piirra();
   }
@@ -577,25 +732,28 @@ function avaaTaulukko() {
   $("#t-otsikot").checked = ASETUS.otsikot;
   $("#t-erotin").value = ASETUS.erotin;
   $("#t-ilmoitus").textContent = "";
+  piirraTaulukko();
+  $("#taulukko").showModal();
+}
+
+function piirraTaulukko() {
   $("#t-taulu").innerHTML = `
     <thead><tr><th>#</th>${SARAKKEET.map(s => `<th class="${s.tyyppi === "raha" || s.tyyppi === "pros" ? "n" : ""}">${esc(s.otsikko)}</th>`).join("")}<th></th></tr></thead>
     <tbody>${TAULU.map(({ r, rivi }, i) => `
-      <tr data-i="${i}" class="${rivi._poistettu ? "poistettu" : ""}" title="${esc(r.tiedosto.name)}, rivi ${rivi._nro}: ${esc(rivi.teksti)}">
+      <tr data-i="${i}" class="${rivi._poistettu ? "poistettu" : ""}" title="${esc(t("riviTooltip", { tiedosto: r.tiedosto.name, nro: rivi._nro, teksti: rivi.teksti }))}">
         <td class="nro">${i + 1}</td>
         ${SARAKKEET.map((s, k) => `<td contenteditable="${rivi._poistettu ? "false" : "true"}" spellcheck="false" data-k="${k}"
           class="${s.tyyppi === "raha" || s.tyyppi === "pros" ? "n" : ""} ${rivi._muokattu.has(s.kentta) ? "muokattu" : ""}">${esc(naytto(arvo(rivi, s, r), s.tyyppi))}</td>`).join("")}
-        <td><button class="pieni" data-rivi="${i}">${rivi._poistettu ? "Palauta" : "Poista"}</button></td>
+        <td><button class="pieni" data-rivi="${i}">${esc(t(rivi._poistettu ? "palauta" : "poista"))}</button></td>
       </tr>`).join("")}</tbody>`;
   piirraTaulukonYhteenveto();
-  $("#taulukko").showModal();
 }
 
 function piirraTaulukonYhteenveto() {
   const akt = TAULU.filter(x => !x.rivi._poistettu);
   const muok = akt.filter(x => x.rivi._muokattu.size).length;
   const poist = TAULU.length - akt.length;
-  $("#t-yhteenveto").textContent = `${akt.length} riviä, brutto yhteensä ${eur(summa(akt.map(x => x.rivi), "brutto"))}` +
-    (muok ? `, ${muok} muokattu` : "") + (poist ? `, ${poist} poistettu (ei mukana kopiossa)` : "");
+  $("#t-yhteenveto").textContent = t("taulukonYhteenveto", { n: akt.length, summa: eur(summa(akt.map(x => x.rivi), "brutto")), m: muok, p: poist });
   $("#t-kopioi").disabled = $("#t-lataa").disabled = !akt.length;
 }
 
@@ -616,8 +774,7 @@ $("#t-taulu").addEventListener("focusout", e => {
   const uusi = tulkitse(td.textContent, s.tyyppi);
   if (uusi === undefined) {
     $("#t-ilmoitus").className = "ilmoitus virhe";
-    $("#t-ilmoitus").textContent = `Arvoa "${td.textContent.trim()}" ei tunnistettu sarakkeeseen ${s.otsikko}, joten muutosta ei tallennettu.` +
-      (s.tyyppi === "aika" ? " Käytä muotoa 13.4.2026 9:40." : "");
+    $("#t-ilmoitus").textContent = t("eiTunnistettu", { v: td.textContent.trim(), s: s.otsikko, aika: s.tyyppi === "aika" });
     td.textContent = naytto(vanha, s.tyyppi);
     return;
   }
@@ -639,7 +796,7 @@ $("#t-taulu").addEventListener("click", e => {
   const tr = e.target.closest("tr");
   tr.classList.toggle("poistettu", rivi._poistettu);
   tr.querySelectorAll("td[data-k]").forEach(td => td.contentEditable = rivi._poistettu ? "false" : "true");
-  e.target.textContent = rivi._poistettu ? "Palauta" : "Poista";
+  e.target.textContent = t(rivi._poistettu ? "palauta" : "poista");
   piirraTaulukonYhteenveto();
 });
 $("#t-otsikot").addEventListener("change", e => { ASETUS.otsikot = e.target.checked; tallennaAsetukset(); });
@@ -648,6 +805,27 @@ $("#t-kopioi").addEventListener("click", () => kopioiRivit($("#t-ilmoitus")));
 $("#t-lataa").addEventListener("click", lataaYhdistetty);
 $("#t-sulje").addEventListener("click", () => $("#taulukko").close());
 $("#taulukko").addEventListener("close", piirra);
+
+/* =====================================================================
+   Kielen vaihto
+   ===================================================================== */
+function kaannaSivu() {
+  document.documentElement.lang = KIELI;
+  document.title = t("otsikko");
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = t(el.dataset.t); });
+  $("#yhdistetty").setAttribute("aria-label", t("yhdistetytRivit"));
+  $("#kieli").value = KIELI;
+}
+$("#kieli").addEventListener("change", e => {
+  KIELI = e.target.value;
+  try { localStorage.setItem("tilitykset-kieli", KIELI); } catch (err) {}
+  ["#ilmoitus", "#t-ilmoitus"].forEach(s => { $(s).textContent = ""; });
+  kaannaSivu();
+  piirra();
+  if ($("#taulukko").open) { piirraTaulukko(); piirraTaulukonYhteenveto(); }
+});
+kaannaSivu();
+piirra();
 </script>
 </body>
 </html>
